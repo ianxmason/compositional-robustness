@@ -35,7 +35,6 @@ def main(data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers
 
     for ckpt in os.listdir(ckpt_path):
         # Load each ckpt
-        # Todo: Test this (imagine if slurm does interrupt)
         if check_if_run and os.path.exists(os.path.join(save_path, "{}_losses.pkl".format(ckpt[:-3]))):
             print("Pickle file already exists at {}. \n Skipping testing for {}".format(
                 os.path.join(save_path, "{}_losses.pkl".format(ckpt[:-3])), ckpt))

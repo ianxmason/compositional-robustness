@@ -102,7 +102,6 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
                 break
 
         # Save model
-        # Todo: testing - should be close to/same as acc/loss from early stopped epoch.
         logger.info("Loading early stopped checkpoint")
         early_stopping.load_from_checkpoint(network)
         network.eval()
@@ -160,28 +159,34 @@ if __name__ == "__main__":
         mkdir_p(args.vis_path)
 
     # Corruptions to train on - for now we don't do triples. If trains fast we can add them
-    corruptions = [['identity'],
-                   ['impulse_noise'],
-                   ['inverse'],
-                   ['gaussian_blur'],
-                   ['stripe'],
-                   ['identity', 'impulse_noise'],
-                   ['identity', 'inverse'],
-                   ['identity', 'gaussian_blur'],
-                   ['identity', 'stripe'],
-                   ['impulse_noise', 'inverse'],
-                   ['impulse_noise', 'gaussian_blur'],
-                   ['impulse_noise', 'stripe'],
-                   ['inverse', 'gaussian_blur'],
-                   ['inverse', 'stripe'],
-                   ['gaussian_blur', 'stripe'],
-                   ['identity', 'impulse_noise', 'inverse'],
-                   ['identity', 'impulse_noise', 'gaussian_blur'],
-                   ['identity', 'impulse_noise', 'stripe'],
-                   ['identity', 'inverse', 'gaussian_blur'],
-                   ['identity', 'inverse', 'stripe'],
-                   ['identity', 'gaussian_blur', 'stripe'],
-                   ['identity', 'impulse_noise', 'inverse', 'gaussian_blur', 'stripe']]
+    # corruptions = [['identity'],
+    #                ['impulse_noise'],
+    #                ['inverse'],
+    #                ['gaussian_blur'],
+    #                ['stripe'],
+    #                ['identity', 'impulse_noise'],
+    #                ['identity', 'inverse'],
+    #                ['identity', 'gaussian_blur'],
+    #                ['identity', 'stripe'],
+    #                ['impulse_noise', 'inverse'],
+    #                ['impulse_noise', 'gaussian_blur'],
+    #                ['impulse_noise', 'stripe'],
+    #                ['inverse', 'gaussian_blur'],
+    #                ['inverse', 'stripe'],
+    #                ['gaussian_blur', 'stripe'],
+    #                ['identity', 'impulse_noise', 'inverse'],
+    #                ['identity', 'impulse_noise', 'gaussian_blur'],
+    #                ['identity', 'impulse_noise', 'stripe'],
+    #                ['identity', 'inverse', 'gaussian_blur'],
+    #                ['identity', 'inverse', 'stripe'],
+    #                ['identity', 'gaussian_blur', 'stripe'],
+    #                ['identity', 'impulse_noise', 'inverse', 'gaussian_blur', 'stripe']]
+
+    # Add triple corruptions - can then add to heatmap. Can actually add to the above list and check-if-run will skip trained
+    corruptions = [['identity', 'impulse_noise', 'inverse', 'gaussian_blur'],
+                   ['identity', 'impulse_noise', 'inverse', 'stripe'],
+                   ['identity', 'impulse_noise', 'gaussian_blur', 'stripe'],
+                   ['identity', 'inverse', 'gaussian_blur', 'stripe']]
 
     main(corruptions, args.data_root, args.ckpt_path, args.logging_path, args.vis_path, args.total_n_classes,
          args.max_epochs, args.batch_size, args.lr, args.n_workers, args.pin_mem, dev, args.vis_data, args.check_if_run)
