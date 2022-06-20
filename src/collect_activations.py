@@ -43,7 +43,7 @@ def main(network_corruptions, data_corruptions, data_root, ckpt_path, save_path,
     # Loop over networks being analysed
     for network_corruption in network_corruptions:
         # Load each ckpt into the network
-        ckpt_name = "{}.pt".format('-'.join(network_corruption))
+        ckpt_name = "{}_invariance-loss.pt".format('-'.join(network_corruption))
         network = DTN(total_n_classes).to(dev)
         network.load_state_dict(torch.load(os.path.join(ckpt_path, ckpt_name)))
         network.eval()
@@ -75,7 +75,7 @@ def main(network_corruptions, data_corruptions, data_root, ckpt_path, save_path,
         # Loop over data corruptions
         for data_corruption in data_corruptions:
             data_name = "{}".format('-'.join(data_corruption))
-            fname = "avg_firing_rates_network_{}_data_{}.pkl".format(ckpt_name[:-3], data_name)
+            fname = "avg_firing_rates_network_{}_data_{}_invariance-loss.pkl".format(ckpt_name[:-3], data_name)
             corruption_path = os.path.join(data_root, data_name)
             trained_classes = list(range(total_n_classes))
             if check_if_run and os.path.exists(os.path.join(save_path, fname)):
@@ -136,8 +136,8 @@ def main(network_corruptions, data_corruptions, data_root, ckpt_path, save_path,
                         normalized_cumsum = class_cumsum[i] / max_activations[i]
                         class_avg_firings.append(normalized_cumsum / class_dpoints[i][:, None])
 
-                        assert torch.all(class_avg_firings[i] <= 1)
-                        assert torch.all(class_avg_firings[i] >= 0)
+                        assert torch.all(class_avg_firings[i] <= 1 + 1e-3)  # isclose
+                        assert torch.all(class_avg_firings[i] >= 0 - 1e-3)
                     else:  # Output layer
                         max_activations[i] = torch.where(max_activations[i] == 0,
                                                          torch.ones(max_activations[i].shape).to(dev),
@@ -145,8 +145,8 @@ def main(network_corruptions, data_corruptions, data_root, ckpt_path, save_path,
                         normalized_cumsum = (class_cumsum[i] - torch.outer(class_dpoints[i], min_activations)) / (
                             max_activations[i] - min_activations)
                         class_avg_firings.append(normalized_cumsum / class_dpoints[i][:, None])
-                        assert torch.all(class_avg_firings[i] <= 1)
-                        assert torch.all(class_avg_firings[i] >= 0)
+                        assert torch.all(class_avg_firings[i] <= 1 + 1e-3)
+                        assert torch.all(class_avg_firings[i] >= 0 - 1e-3)
 
             # Save
             print("Collected per class average firing rates.")
@@ -184,14 +184,47 @@ if __name__ == "__main__":
     # Create unmade directories
     mkdir_p(args.save_path)
 
-    network_corruptions = [['impulse_noise', 'stripe'], ['stripe'], ['impulse_noise']]
+    # network_corruptions = [['impulse_noise', 'stripe'], ['stripe'], ['impulse_noise']]
+    # data_corruptions = [['impulse_noise'],  # Elemental corruption 1
+    #                     ['stripe'],  # Elemental corruption 2
+    #                     ['impulse_noise', 'stripe'],  # Composition of corruptions
+    #                     ['gaussian_blur', 'stripe'],  # Composition that 'kind of' works (includes one elemental)
+    #                     ['impulse_noise', 'inverse'],  # Composition that doesn't work (includes one elemental)
+    #                     ['inverse']]  # Elemental corruption not trained on
 
-    data_corruptions = [['impulse_noise'],  # Elemental corruption 1
-                        ['stripe'],  # Elemental corruption 2
-                        ['impulse_noise', 'stripe'],  # Composition of corruptions
-                        ['gaussian_blur', 'stripe'],  # Composition that 'kind of' works (includes one elemental)
-                        ['impulse_noise', 'inverse'],  # Composition that doesn't work (includes one elemental)
-                        ['inverse']]  # Elemental corruption not trained on
+    # network_corruptions = [['identity', 'inverse', 'gaussian_blur']]
+    # data_corruptions = [['identity'],
+    #                     ['inverse'],
+    #                     ['gaussian_blur'],
+    #                     ['inverse', 'gaussian_blur']]
 
-    main(network_corruptions, data_corruptions, args.data_root, args.ckpt_path, args.save_path, args.total_n_classes,
-         args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run)
+    # network_corruptions = [['identity', 'canny_edges', 'inverse']]
+    # data_corruptions = [['identity'],
+    #                     ['canny_edges'],
+    #                     ['inverse'],
+    #                     ['canny_edges', 'inverse']]
+
+    # main(network_corruptions, data_corruptions, args.data_root, args.ckpt_path, args.save_path, args.total_n_classes,
+    #      args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run)
+
+
+    # For violin plots across corruptions. --check-if-run flag will avoid duplicate calculations
+    networks = [['identity', 'gaussian_blur', 'stripe'],
+                ['identity', 'impulse_noise', 'gaussian_blur'],
+                ['identity', 'impulse_noise', 'inverse'],
+                ['identity', 'impulse_noise', 'stripe'],
+                ['identity', 'inverse', 'gaussian_blur'],
+                ['identity', 'inverse', 'stripe']]
+
+    networks = [['identity', 'rotate_fixed', 'scale']]
+
+    for network in networks:
+        network_corruptions = [network, [network[0]] + [network[1]], [network[0]] + [network[2]]]
+        data_corruptions = [[network_corruptions[0][0]],
+                            [network_corruptions[0][1]],
+                            [network_corruptions[0][2]],
+                            [network_corruptions[0][1], network_corruptions[0][2]],
+                            [network_corruptions[0][2], network_corruptions[0][1]]]
+
+        main(network_corruptions, data_corruptions, args.data_root, args.ckpt_path, args.save_path,
+             args.total_n_classes, args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run)

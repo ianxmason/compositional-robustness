@@ -403,7 +403,7 @@ def shot_noise(x, severity=5):
     return x.astype(np.float32)
 
 
-def impulse_noise(x, severity=4):
+def impulse_noise(x, severity=5):
     c = [.03, .06, .09, 0.17, 0.27][severity - 1]
 
     x = sk.util.random_noise(np.array(x) / 255., mode='s&p', amount=c)
@@ -745,8 +745,25 @@ def rotate_fixed(x, severity=5):
     return x.astype(np.float32)
 
 
-def scale(x, severity=3):
+def scale(x, severity=5):
     c = [(1 / .9, 1 / .9), (1 / .8, 1 / .8), (1 / .7, 1 / .7), (1 / .6, 1 / .6), (1 / .5, 1 / .5)][severity - 1]
+
+    aff = transform.AffineTransform(scale=c)
+
+    a1, a2 = aff.params[0, :2]
+    b1, b2 = aff.params[1, :2]
+    a3 = 13.5 * (1 - a1 - a2)
+    b3 = 13.5 * (1 - b1 - b2)
+    aff = transform.AffineTransform(scale=c, translation=[a3, b3])
+
+    x = np.array(x) / 255.
+    x = transform.warp(x, inverse_map=aff)
+    x = np.clip(x, 0, 1) * 255
+    return x.astype(np.float32)
+
+
+def thinning(x, severity=5):
+    c = [(1 / .9, 1.), (1 / .8, 1.), (1 / .7, 1.), (1 / .6, 1.), (1 / .5, 1.)][severity - 1]
 
     aff = transform.AffineTransform(scale=c)
 

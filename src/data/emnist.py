@@ -15,6 +15,7 @@ import os
 import numpy as np
 import torch
 import sys
+import pickle
 sys.path.append("../")
 import data.data_transforms as dt
 from lib.utils import mkdir_p
@@ -291,7 +292,6 @@ def _train_val_split(sorted_imgs, sorted_lbls):
     return (tr_imgs, tr_lbls), (val_imgs, val_lbls)
 
 
-
 if __name__ == "__main__":
     # To check if it worked can count the files in each corruption directory and check they are the same == 131745
     # https://stackoverflow.com/questions/15216370/how-to-count-number-of-files-in-each-directory
@@ -303,7 +303,7 @@ if __name__ == "__main__":
 
     # PATHS
     root_dir = "/om2/user/imason/compositions/datasets/"
-    output_dir = os.path.join(root_dir, "EMNIST/")
+    output_dir = os.path.join(root_dir, "EMNIST2/")
 
     if create_datasets:
         # LOAD EMNIST DATA
@@ -313,45 +313,20 @@ if __name__ == "__main__":
         # CREATE TARGET DATASETS: E.G. ../datasets/mnist/EMNIST/inverse/train/0/21.jpg
         np.random.seed(seed)   # diff transforms for train, val and test sets.
         for (sorted_imgs, sorted_labels), dset_name in zip(all_data, dset_names):
-            # SETUP TARGET DATASETS FROM "LOW-LEVEL" CORRUPTIONS
-            base_corruption_names = ['identity', 'impulse_noise', 'inverse', 'gaussian_blur', 'stripe']
-            base_corruption_fns = [getattr(dt, c_name) for c_name in base_corruption_names]
-
-            corruption_names = []
-            corruption_fns = []
-            for i, name1 in enumerate(base_corruption_names):
-                # Individual shifts
-                corruption_names.append(name1)
-                corruption_fns.append([base_corruption_fns[i]])
-                for j, name2 in enumerate(base_corruption_names):
-                    # Pairs of shifts, both orders, excluding identity.
-                    # (Some orders will be identical because the corruptions are commutative)
-                    if name1 == 'identity' or name2 == 'identity' or name1 == name2:
-                        pass
-                    else:
-                        corruption_names.append('-'.join((name1, name2)))
-                        corruption_fns.append([base_corruption_fns[i], base_corruption_fns[j]])
-            # Add triples (not permutations) for experimentation to see if interesting - hardcoded
-            corruption_names.append('-'.join((base_corruption_names[1], base_corruption_names[2],
-                                              base_corruption_names[3])))
-            corruption_fns.append([base_corruption_fns[1], base_corruption_fns[2], base_corruption_fns[3]])
-            corruption_names.append('-'.join((base_corruption_names[1], base_corruption_names[2],
-                                              base_corruption_names[4])))
-            corruption_fns.append([base_corruption_fns[1], base_corruption_fns[2], base_corruption_fns[4]])
-            corruption_names.append('-'.join((base_corruption_names[1], base_corruption_names[3],
-                                              base_corruption_names[4])))
-            corruption_fns.append([base_corruption_fns[1], base_corruption_fns[3], base_corruption_fns[4]])
-            corruption_names.append('-'.join((base_corruption_names[2], base_corruption_names[3],
-                                              base_corruption_names[4])))
-            corruption_fns.append([base_corruption_fns[2], base_corruption_fns[3], base_corruption_fns[4]])
-            # Add the single quadruple - hardcoded
-            corruption_names.append('-'.join((base_corruption_names[1], base_corruption_names[2],
-                                              base_corruption_names[3], base_corruption_names[4])))
-            corruption_fns.append([base_corruption_fns[1], base_corruption_fns[2],
-                                   base_corruption_fns[3], base_corruption_fns[4]])
-
+            # SETUP TARGET DATASETS FROM CORRUPTIONS AND COMPOSITIONS IN PKL FILE
+            with open(os.path.join(output_dir, "corruption_names.pkl"), "rb") as f:
+                all_corruptions = pickle.load(f)
+            corruption_names = ['-'.join(c_names) for c_names in all_corruptions]
+            corruption_fns = [[getattr(dt, c_name) for c_name in c_names] for c_names in all_corruptions]
+            corruption_paths = []
+            for c_name in corruption_names:
+                c_path = os.path.join(output_dir, c_name, dset_name)
+                if os.path.exists(c_path):
+                    print("Warning: {} already exists. Skipping...".format(c_path))
+                    continue
+                else:
+                    corruption_paths.append(c_path)
             # Create datasets
-            corruption_paths = [os.path.join(output_dir, c_name, dset_name) for c_name in corruption_names]
             _create_emnist_target_datasets(sorted_imgs, sorted_labels, corruption_fns, corruption_names,
                                            corruption_paths)
 

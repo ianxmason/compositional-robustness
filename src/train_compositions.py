@@ -183,10 +183,15 @@ if __name__ == "__main__":
     #                ['identity', 'impulse_noise', 'inverse', 'gaussian_blur', 'stripe']]
 
     # Add triple corruptions - can then add to heatmap. Can actually add to the above list and check-if-run will skip trained
-    corruptions = [['identity', 'impulse_noise', 'inverse', 'gaussian_blur'],
-                   ['identity', 'impulse_noise', 'inverse', 'stripe'],
-                   ['identity', 'impulse_noise', 'gaussian_blur', 'stripe'],
-                   ['identity', 'inverse', 'gaussian_blur', 'stripe']]
+    # corruptions = [['identity', 'impulse_noise', 'inverse', 'gaussian_blur'],
+    #                ['identity', 'impulse_noise', 'inverse', 'stripe'],
+    #                ['identity', 'impulse_noise', 'gaussian_blur', 'stripe'],
+    #                ['identity', 'inverse', 'gaussian_blur', 'stripe']]
+
+    # Hardcode canny_edges-inverse to see if interesting
+    corruptions = [['identity', 'rotate_fixed'],
+                   ['identity', 'scale'],
+                   ['identity', 'rotate_fixed', 'scale']]
 
     main(corruptions, args.data_root, args.ckpt_path, args.logging_path, args.vis_path, args.total_n_classes,
          args.max_epochs, args.batch_size, args.lr, args.n_workers, args.pin_mem, dev, args.vis_data, args.check_if_run)

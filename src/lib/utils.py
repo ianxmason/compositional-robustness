@@ -2,6 +2,7 @@ import os
 import sys
 import errno
 import logging
+import random
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,6 +17,27 @@ def mkdir_p(path):
             pass
         else:
             raise
+
+
+def seed_torch(seed=404, deterministic=False):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+
+    # Multi-GPU
+    # torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
+
+    # Sacrifice speed for exact reproducibility
+    if deterministic:
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.deterministic = True
+
+
+def reset_rngs(rng=None, seed=404, deterministic=False):
+    if rng is not None:
+        rng.seed(seed)
+    seed_torch(seed, deterministic)
 
 
 def accuracy(outputs, targets):
