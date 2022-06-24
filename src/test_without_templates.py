@@ -58,7 +58,8 @@ def main(data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers
     num_random_runs = 100
     random_results = []
 
-    for turn_off_units in [template_units, non_template_units, all_units, no_units]:
+    # for turn_off_units in [template_units, non_template_units, all_units, no_units]:
+    for turn_off_units in [no_units]:
     # for i in range(num_random_runs):
         network.load_state_dict(torch.load(os.path.join(ckpt_path, ckpt)))
 
@@ -74,6 +75,9 @@ def main(data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers
                 for unit in turn_off_units["conv{}".format(conv_count)]:
                     module.weight.data[unit, :, :, :] = 0
                     module.bias.data[unit] = 0
+                # if conv_count == 1:
+                #     from lib.equivariant_hooks import RotationHook
+                #     rotation_hook = RotationHook(module)
                 if conv_count == 2:
                     break
 

@@ -50,7 +50,7 @@ def main(data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers
         corruption_accs = {}
         corruption_losses = {}
         for test_corruption in os.listdir(data_root):
-            if test_corruption == "raw":
+            if test_corruption == "raw" or test_corruption == "corruption_names.pkl":
                 continue
             corruption_path = os.path.join(data_root, test_corruption)
             trained_classes = list(range(total_n_classes))
@@ -71,11 +71,11 @@ def main(data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Args to test networks on all corruptions in a given directory.')
-    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST/',
+    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST2/',
                         help="path to directory containing directories of different corruptions")
-    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST/',
+    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST2/',
                         help="path to directory to save checkpoints")
-    parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/results/EMNIST/',
+    parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/results/EMNIST2/',
                         help="path to directory to save test accuracies and losses")
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
     parser.add_argument('--batch-size', type=int, default=128, help="batch size")

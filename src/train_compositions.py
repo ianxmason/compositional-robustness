@@ -3,6 +3,7 @@ Train a model on individual data transformations, pairs of transformations and a
 """
 import argparse
 import os
+import pickle
 import torch
 import torch.nn as nn
 from data.data_transforms import denormalize
@@ -17,7 +18,6 @@ from lib.utils import *
         # Have done no optimisation of hparams at all. The current parameters are just guessed from experience.
     # Todo: WandB style tracking - loss curves etc.
     # Todo: split over multiple gpus for faster training over corruptions
-    # Todo: Epochs. If multiple corruptions, the number of training steps is larger. Either set iterations instead of epochs or use early stopping well.
     # Todo: neatening - write the early stopping output to the logger, so we can see the last saved es_ckpt
 
 
@@ -60,13 +60,15 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
         criterion = nn.CrossEntropyLoss()
         early_stopping = EarlyStopping(patience=25, verbose=True, path=os.path.join(ckpt_path, "es_ckpt.pt"))
 
-        # Training
+        # Train Loop
+        val_freq = len(trn_dl) // len(corruption_names)
+        logger.info("Validation frequency: every {} batches".format(val_freq))
         for epoch in range(max_epochs):
             # Training
             network.train()
             epoch_loss = 0.0
             epoch_acc = 0.0
-            for data_tuple in trn_dl:
+            for i, data_tuple in enumerate(trn_dl, 1):
                 x_trn, y_trn = data_tuple[0].to(dev), data_tuple[1].to(dev)
                 optim.zero_grad()
                 output = network(x_trn)
@@ -76,30 +78,34 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
                 optim.step()
                 epoch_loss += loss.item()
                 epoch_acc += acc
+
+                if i % val_freq == 0:
+                    # Validation
+                    network.eval()
+                    valid_loss = 0.0
+                    valid_acc = 0.0
+                    with torch.no_grad():
+                        for data_tuple in val_dl:
+                            x_val, y_val = data_tuple[0].to(dev), data_tuple[1].to(dev)
+                            output = network(x_val)
+                            loss = criterion(output, y_val)
+                            acc = accuracy(output, y_val)
+                            valid_loss += loss.item()
+                            valid_acc += acc
+                    logger.info("Validation loss {:6.4f}".format(valid_loss / len(val_dl)))
+                    logger.info("Validation accuracy {:6.3f}".format(valid_acc / len(val_dl)))
+                    # Early Stopping
+                    early_stopping(valid_loss / len(val_dl), network)  # ES on loss
+                    # early_stopping(100. - (valid_acc / len(val_dl)), network)  # ES on acc
+                    if early_stopping.early_stop:
+                        logger.info("Early stopping")
+                        break
+                    network.train()
+
+            if early_stopping.early_stop:
+                break
             results = [epoch, epoch_loss / len(trn_dl), epoch_acc / len(trn_dl)]
             logger.info("Epoch {}. Avg train loss {:6.4f}. Avg train acc {:6.3f}.".format(*results))
-
-            # Validation
-            network.eval()
-            valid_loss = 0.0
-            valid_acc = 0.0
-            with torch.no_grad():
-                for data_tuple in val_dl:
-                    x_val, y_val = data_tuple[0].to(dev), data_tuple[1].to(dev)
-                    output = network(x_val)
-                    loss = criterion(output, y_val)
-                    acc = accuracy(output, y_val)
-                    valid_loss += loss.item()
-                    valid_acc += acc
-            logger.info("Validation loss {:6.4f}".format(valid_loss / len(val_dl)))
-            logger.info("Validation accuracy {:6.3f}".format(valid_acc / len(val_dl)))
-
-            # Early Stopping
-            early_stopping(valid_loss / len(val_dl), network)  # ES on loss
-            # early_stopping(100. - (valid_acc / len(val_dl)), network)  # ES on acc
-            if early_stopping.early_stop:
-                logger.info("Early stopping")
-                break
 
         # Save model
         logger.info("Loading early stopped checkpoint")
@@ -124,13 +130,13 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Args to train networks on different corruptions.')
-    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST/',
+    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST2/',
                         help="path to directory containing directories of different corruptions")
-    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST/',
+    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST2/',
                         help="path to directory to save checkpoints")
-    parser.add_argument('--logging-path', type=str, default='/om2/user/imason/compositions/logs/EMNIST/',
+    parser.add_argument('--logging-path', type=str, default='/om2/user/imason/compositions/logs/EMNIST2/',
                         help="path to directory to save logs")
-    parser.add_argument('--vis-path', type=str, default='/om2/user/imason/compositions/figs/EMNIST/visualisations/',
+    parser.add_argument('--vis-path', type=str, default='/om2/user/imason/compositions/figs/EMNIST2/visualisations/',
                         help="path to directory to save data visualisations")
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
     parser.add_argument('--max-epochs', type=int, default=50, help="max number of training epochs")
@@ -189,9 +195,25 @@ if __name__ == "__main__":
     #                ['identity', 'inverse', 'gaussian_blur', 'stripe']]
 
     # Hardcode canny_edges-inverse to see if interesting
-    corruptions = [['identity', 'rotate_fixed'],
-                   ['identity', 'scale'],
-                   ['identity', 'rotate_fixed', 'scale']]
+    # corruptions = [['identity', 'rotate_fixed'],
+    #                ['identity', 'scale'],
+    #                ['identity', 'rotate_fixed', 'scale']]
+
+    with open(os.path.join(args.data_root, "corruption_names.pkl"), "rb") as f:
+        all_corruptions = pickle.load(f)
+
+    corruptions = []
+    # Always include identity, remove permutations
+    for corr in all_corruptions:
+        if 'identity' not in corr:
+            corr += ['identity']
+            corr.sort()
+            if corr not in corruptions:
+                corruptions.append(corr)
+        else:
+            corr.sort()
+            if corr not in corruptions:
+                corruptions.append(corr)
 
     main(corruptions, args.data_root, args.ckpt_path, args.logging_path, args.vis_path, args.total_n_classes,
          args.max_epochs, args.batch_size, args.lr, args.n_workers, args.pin_mem, dev, args.vis_data, args.check_if_run)

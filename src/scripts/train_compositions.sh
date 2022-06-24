@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH -t 9:00:00                  #  walltime hh:mm:ss
+#SBATCH -t 36:00:00                  #  walltime hh:mm:ss
 #SBATCH -N 1                         #  one node
 #SBATCH -n 2                         #  CPU cores
-#SBATCH -x node[093,094,097,098,100,101,102,103,104]  #  had this issue https://github.mit.edu/MGHPCC/OpenMind/issues/3375
-#SBATCH -o /om2/user/imason/compositions/slurm/EMNIST/slurm-%j.out    # file to send output to
-#SBATCH --mem=16G                    #  RAM
+#SBATCH -x node[093,094,097,098,100,101,102,103,104,105,106]  #  had this issue https://github.mit.edu/MGHPCC/OpenMind/issues/3375
+#SBATCH -o /om2/user/imason/compositions/slurm/EMNIST2/slurm-%j.out    # file to send output to
+#SBATCH --mem=24G                    #  RAM
 #SBATCH --gres=gpu:1                 #  one GPU
 #SBATCH --constraint=11GB            #  any-gpu any gpu on cluster (may not be compatible with pytorch.
 #                                    #  =high-capacity gives high-capacity GPU (compatible). =11GB gives 11gb gpu.
