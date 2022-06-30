@@ -5,6 +5,7 @@ Includes torchvision datasets to load the dataset, along with methods to generat
 dataset.
 """
 import matplotlib
+import argparse
 # must select appropriate backend before importing any matplotlib functions
 matplotlib.use("Agg")
 from matplotlib.image import imsave, imread
@@ -296,8 +297,11 @@ if __name__ == "__main__":
     # To check if it worked can count the files in each corruption directory and check they are the same == 131745
     # https://stackoverflow.com/questions/15216370/how-to-count-number-of-files-in-each-directory
     # PARAMS
-    create_datasets = True
+    parser = argparse.ArgumentParser(description='Generate multiple EMNIST corruptions in parallel.')
+    parser.add_argument('--corruption-ID', type=int, default=0, help="which corruption to generate")
+    args = parser.parse_args()
 
+    create_datasets = True
     # REPRODUCIBILITY
     seed = 1234
 
@@ -316,16 +320,27 @@ if __name__ == "__main__":
             # SETUP TARGET DATASETS FROM CORRUPTIONS AND COMPOSITIONS IN PKL FILE
             with open(os.path.join(output_dir, "corruption_names.pkl"), "rb") as f:
                 all_corruptions = pickle.load(f)
-            corruption_names = ['-'.join(c_names) for c_names in all_corruptions]
-            corruption_fns = [[getattr(dt, c_name) for c_name in c_names] for c_names in all_corruptions]
-            corruption_paths = []
-            for c_name in corruption_names:
-                c_path = os.path.join(output_dir, c_name, dset_name)
-                if os.path.exists(c_path):
-                    print("Warning: {} already exists. Skipping...".format(c_path))
-                    continue
-                else:
-                    corruption_paths.append(c_path)
+
+            c_names = all_corruptions[args.corruption_ID]
+            c_name = '-'.join(c_names)
+            corruption_names = [c_name]
+            corruption_paths = [os.path.join(output_dir, c_name, dset_name)]
+            corruption_fns = [[getattr(dt, c) for c in c_names]]
+
+            # corruption_names = []
+            # corruption_fns = []
+            # corruption_paths = []
+            # for c_names in all_corruptions:
+            #     c_name = '-'.join(c_names)
+            #     c_path = os.path.join(output_dir, c_name, dset_name)
+            #     if os.path.exists(c_path):
+            #         print("Warning: {} already exists. Skipping...".format(c_path))
+            #         continue
+            #     else:
+            #         corruption_names.append(c_name)
+            #         corruption_paths.append(c_path)
+            #         corruption_fns.append([getattr(dt, c) for c in c_names])
+
             # Create datasets
             _create_emnist_target_datasets(sorted_imgs, sorted_labels, corruption_fns, corruption_names,
                                            corruption_paths)

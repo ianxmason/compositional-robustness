@@ -58,7 +58,8 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
         network = DTN(total_n_classes).to(dev)
         optim = torch.optim.Adam(network.parameters(), lr)
         criterion = nn.CrossEntropyLoss()
-        early_stopping = EarlyStopping(patience=25, verbose=True, path=os.path.join(ckpt_path, "es_ckpt.pt"))
+        es_ckpt_path = os.path.join(ckpt_path, "es_ckpt_{}.pt".format('-'.join(corruption_names)))
+        early_stopping = EarlyStopping(patience=25, verbose=True, path=es_ckpt_path)
 
         # Train Loop
         val_freq = len(trn_dl) // len(corruption_names)
@@ -123,6 +124,7 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
                 valid_acc += acc
         logger.info("Early Stopped validation loss {:6.4f}".format(valid_loss / len(val_dl)))
         logger.info("Early Stopped validation accuracy {:6.3f}".format(valid_acc / len(val_dl)))
+        early_stopping.delete_checkpoint()  # Removes from disk
 
         torch.save(network.state_dict(), os.path.join(ckpt_path, ckpt_name))
         logger.info("Saved best model to {}".format(os.path.join(ckpt_path, ckpt_name)))
@@ -148,6 +150,7 @@ if __name__ == "__main__":
     parser.add_argument('--vis-data', action='store_true', help="set to save a png of one batch of data")
     parser.add_argument('--check-if-run', action='store_true', help="If set, skips corruptions for which training has"
                                                                     " already been run. Useful for slurm interruption")
+    parser.add_argument('--corruption-ID', type=int, default=0, help="which corruption to generate")
     args = parser.parse_args()
 
     # Set device
@@ -214,6 +217,9 @@ if __name__ == "__main__":
             corr.sort()
             if corr not in corruptions:
                 corruptions.append(corr)
+
+    # Using slurm to parallelise the training
+    corruptions = corruptions[args.corruption_ID:args.corruption_ID+1]
 
     main(corruptions, args.data_root, args.ckpt_path, args.logging_path, args.vis_path, args.total_n_classes,
          args.max_epochs, args.batch_size, args.lr, args.n_workers, args.pin_mem, dev, args.vis_data, args.check_if_run)

@@ -3,12 +3,14 @@ Test models trained with different combinations of data on all available composi
 """
 import argparse
 import os
+import sys
 import torch
 import torch.nn as nn
 import pickle
 from data.data_loaders import get_static_emnist_dataloaders
-from lib.networks import DTN
+from lib.networks import DTN, DTN_half
 from lib.utils import *
+from lib.equivariant_hooks import *
 
 # Todo: For if/when run more detailed/designed experiments
     # Todo - seeding/reproducibility
@@ -31,18 +33,35 @@ def loss_and_accuracy(model, dataloader):
     return test_loss / len(dataloader), test_acc / len(dataloader)
 
 
-def main(data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers, pin_mem, dev, check_if_run):
+def main(data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers, pin_mem, dev, check_if_run,
+         total_processes, process):
+    files = os.listdir(ckpt_path)
+    files.sort()
+    assert total_processes <= len(files)
+    files_per_process = len(files) // total_processes
+    if process == total_processes - 1:
+        files = files[files_per_process * process:]
+    else:
+        files = files[files_per_process * process:files_per_process * (process + 1)]
 
-    for ckpt in os.listdir(ckpt_path):
+    for ckpt in files:
         # Load each ckpt
         if check_if_run and os.path.exists(os.path.join(save_path, "{}_losses.pkl".format(ckpt[:-3]))):
             print("Pickle file already exists at {}. \n Skipping testing for {}".format(
                 os.path.join(save_path, "{}_losses.pkl".format(ckpt[:-3])), ckpt))
             continue
-        if ckpt == "es_ckpt.pt":  # don't want to test early stopping ckpt
-            print("Skipped early stopping ckpt")
+        if "es_" == ckpt[:3]:  # don't want to test early stopping ckpts
+            print("Skipped early stopping ckpt {}".format(ckpt))
             continue
-        network = DTN(total_n_classes).to(dev)
+        if "equivariant" in ckpt:
+            network = DTN_half(total_n_classes).to(dev)
+            for module in network.modules():
+                if isinstance(module, nn.Conv2d):
+                    rot_hook = RotationHook(module)
+                    print("Hooked module: {}".format(module))
+                    break
+        else:
+            network = DTN(total_n_classes).to(dev)
         network.load_state_dict(torch.load(os.path.join(ckpt_path, ckpt)))
         print("Testing {}".format(ckpt))
 
@@ -67,6 +86,8 @@ def main(data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers
             pickle.dump(corruption_accs, f)
         with open(os.path.join(save_path, "{}_losses.pkl".format(ckpt[:-3])), "wb") as f:
             pickle.dump(corruption_losses, f)
+        if "equivariant" in ckpt:
+            rot_hook.close()
 
 
 if __name__ == "__main__":
@@ -84,6 +105,8 @@ if __name__ == "__main__":
     parser.add_argument('--cpu', action='store_true', help="set to train with the cpu (PyTorch) - untested")
     parser.add_argument('--check-if-run', action='store_true', help="If set, skips corruptions for which training has"
                                                                     " already been run. Useful for slurm interruption")
+    parser.add_argument('--num-processes', type=int, default=20, help="total processes to split into = SLURM_ARRAY_TASK_COUNT")
+    parser.add_argument('--process', type=int, default=0, help="which process is running = SLURM_ARRAY_TASK_ID")
     args = parser.parse_args()
 
     # Set device
@@ -97,6 +120,9 @@ if __name__ == "__main__":
     # Create unmade directories
     mkdir_p(args.save_path)
 
+    print("Running process {} of {}".format(args.process + 1, args.num_processes))
+    sys.stdout.flush()
+
     main(args.data_root, args.ckpt_path, args.save_path, args.total_n_classes, args.batch_size, args.n_workers,
-         args.pin_mem, dev, args.check_if_run)
+         args.pin_mem, dev, args.check_if_run, args.num_processes, args.process)
 

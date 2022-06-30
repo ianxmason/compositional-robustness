@@ -296,7 +296,8 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
         optim = torch.optim.Adam(network.parameters(), lr)
         # classifier_optim = torch.optim.Adam(network.classifier.parameters(), lr)
         criterion = nn.CrossEntropyLoss()
-        early_stopping = EarlyStopping(patience=25, verbose=True, path=os.path.join(ckpt_path, "es_ckpt.pt"))
+        es_ckpt_path = os.path.join(ckpt_path, "es_ckpt_{}_{}.pt".format('-'.join(corruption_names), experiment_name))
+        early_stopping = EarlyStopping(patience=25, verbose=True, path=es_ckpt_path)
 
         # Training
         l1w, l2w, l3w, l4w = weights
@@ -452,7 +453,7 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
         logger.info("Early Stopped validation inv loss {:6.4f}".format(valid_inv_loss / len(val_dls[0])))
         logger.info("Early Stopped validation loss {:6.4f}".format(valid_loss / len(val_dls[0])))
         logger.info("Early Stopped validation accuracy {:6.3f}".format(valid_acc / len(val_dls[0])))
-
+        early_stopping.delete_checkpoint()  # Removes from disk
         if "equivariant" in experiment_name:
             rot_hook.close()
             # scale_hook.close()
@@ -477,7 +478,14 @@ if __name__ == "__main__":
     parser.add_argument('--max-epochs', type=int, default=50, help="max number of training epochs")
     parser.add_argument('--batch-size', type=int, default=128, help="batch size")
     parser.add_argument('--lr', type=float, default=1e-3, help="learning rate")
-    parser.add_argument('--n-workers', type=int, default=4, help="number of workers (PyTorch)")
+    parser.add_argument('--n-workers', type=int, default=1, help="number of workers (PyTorch)")
+    # 4 workers seems to cause hanging. Likely due to zipping multiple dataloaders each with 4 workers
+    # https://stackoverflow.com/questions/53998282/how-does-the-number-of-workers-parameter-in-pytorch-dataloader-actually-work
+    # setting num_workers > num_cores may be complicated.
+    # Try solution: use 2 workers, ask for more cores from openmind
+    # Each corruption adds 3*num_workers. So for 3 corruptions ask for 3*3*num_workers=18 cores
+    # With 2 workers and 18 cores still get some hanging
+    # With 1 worker and 18 cores seems to hang less (maybe never - not checked training over all shifts)
     parser.add_argument('--pin-mem', action='store_true', help="set to turn pin memory on (PyTorch)")
     parser.add_argument('--cpu', action='store_true', help="set to train with the cpu (PyTorch) - untested")
     parser.add_argument('--vis-data', action='store_true', help="set to save a png of one batch of data")
@@ -488,6 +496,7 @@ if __name__ == "__main__":
     parser.add_argument('--weights', type=str, help="comma delimited string of weights for the loss functions")
     parser.add_argument('--compare-corrs', type=str,
                         help="comma delimited string of which corrs to use as postive pairs")
+    parser.add_argument('--corruption-ID', type=int, default=0, help="which corruption to generate")
     args = parser.parse_args()
 
     # Set device
@@ -533,6 +542,9 @@ if __name__ == "__main__":
             corr.sort()
             if corr not in corruptions and len(corr) == 3:
                 corruptions.append(corr)
+
+    # Using slurm to parallelise the training
+    corruptions = corruptions[args.corruption_ID:args.corruption_ID + 1]
 
     main(corruptions, args.data_root, args.ckpt_path, args.logging_path, args.vis_path, args.total_n_classes,
          args.max_epochs, args.batch_size, args.lr, weights, compare_corrs, args.experiment_name, args.n_workers,

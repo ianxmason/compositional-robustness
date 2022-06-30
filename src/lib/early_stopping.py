@@ -3,6 +3,7 @@ From https://github.com/Bjarten/early-stopping-pytorch
 """
 import numpy as np
 import torch
+import os
 
 
 class EarlyStopping:
@@ -57,3 +58,6 @@ class EarlyStopping:
 
     def load_from_checkpoint(self, model):
         model.load_state_dict(torch.load(self.path))
+
+    def delete_checkpoint(self):
+        os.remove(self.path)
