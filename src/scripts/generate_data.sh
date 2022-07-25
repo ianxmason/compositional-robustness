@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH -t 24:00:00                  #  walltime hh:mm:ss
+#SBATCH -t 4:00:00                   #  walltime hh:mm:ss
 #SBATCH -N 1                         #  one node
 #SBATCH -n 2                         #  CPU cores
 #SBATCH --mem=12G                    #  RAM
-#SBATCH --array=0-56                 #  submit each of the 57 corruptions as a separate job
-#SBATCH -o /om2/user/imason/compositions/slurm/EMNIST2/slurm-%j.out    # file to send output to
+#SBATCH --array=0-168                #  EMNIST2: 57 corruptions. EMNIST3: 169 corrruptions.
+#SBATCH -o /om2/user/imason/compositions/slurm/EMNIST3/slurm-%j.out    # file to send output to
 
 # Took ~14-24 hours (not sure, stopped and restarted several times) and 4GB memory for initial long list of corruptions
 cd data/

@@ -10,7 +10,7 @@ TODO:
 
 import math
 from scipy.ndimage.interpolation import shift
-from scipy.ndimage import grey_erosion, grey_dilation, gaussian_filter
+from scipy.ndimage import grey_erosion, grey_dilation, gaussian_filter, gaussian_filter1d
 import scipy.ndimage
 import torch
 import numpy as np
@@ -431,8 +431,9 @@ def speckle_noise(x, severity=5):
 
 def gaussian_blur(x, severity=3):
     c = [1, 2, 3, 4, 6][severity - 1]
-
-    x = gaussian(np.array(x) / 255., sigma=c, multichannel=True)
+    # Todo: removed multichannel=True to get rotational symmetry for imgs of size 28x28
+    #   may need to add back in for color images to avoid greyscale e.g. NxNx3
+    x = gaussian(np.array(x) / 255., sigma=c)
     x = np.clip(x, 0, 1) * 255
     return x.astype(np.float32)
 
@@ -688,6 +689,8 @@ def quantize(x, severity=5):
 
 def shear(x, severity=2):
     c = [0.2, 0.4, 0.6, 0.8, 1.][severity - 1]
+    # Todo: why is the center e.g. 13.5 rather than 14 for 28x28 image? (Guess is to do with zero-indexing)
+    center = ((x.shape[0] / 2) - 0.5, (x.shape[1] / 2) - 0.5)
 
     # Randomly switch directions
     bit = np.random.choice([-1, 1], 1)[0]
@@ -697,8 +700,28 @@ def shear(x, severity=2):
     # Calculate translation in order to keep image center (13.5, 13.5) fixed
     a1, a2 = aff.params[0, :2]
     b1, b2 = aff.params[1, :2]
-    a3 = 13.5 * (1 - a1 - a2)
-    b3 = 13.5 * (1 - b1 - b2)
+    a3 = center[0] * (1 - a1 - a2)
+    b3 = center[1] * (1 - b1 - b2)
+    aff = transform.AffineTransform(shear=c, translation=[a3, b3])
+
+    x = np.array(x) / 255.
+    x = transform.warp(x, inverse_map=aff)
+    x = np.clip(x, 0, 1) * 255.
+    return x.astype(np.float32)
+
+
+def shear_fixed(x, severity=3):  # fixed shear
+    c = [0.2, 0.4, 0.6, 0.8, 1.][severity - 1]
+    # Todo: why is the center e.g. 13.5 rather than 14 for 28x28 image? (Guess is to do with zero-indexing)
+    center = ((x.shape[0] / 2) - 0.5, (x.shape[1] / 2) - 0.5)
+
+    aff = transform.AffineTransform(shear=c)
+
+    # Calculate translation in order to keep image center (13.5, 13.5) fixed
+    a1, a2 = aff.params[0, :2]
+    b1, b2 = aff.params[1, :2]
+    a3 = center[0] * (1 - a1 - a2)
+    b3 = center[1] * (1 - b1 - b2)
     aff = transform.AffineTransform(shear=c, translation=[a3, b3])
 
     x = np.array(x) / 255.
@@ -709,6 +732,8 @@ def shear(x, severity=2):
 
 def rotate(x, severity=3):
     c = [0.2, 0.4, 0.6, 0.8, 1.][severity - 1]
+    # Todo: why is the center e.g. 13.5 rather than 14 for 28x28 image? (Guess is to do with zero-indexing)
+    center = ((x.shape[0] / 2) - 0.5, (x.shape[1] / 2) - 0.5)
 
     # Randomly switch directions
     bit = np.random.choice([-1, 1], 1)[0]
@@ -717,8 +742,8 @@ def rotate(x, severity=3):
 
     a1, a2 = aff.params[0, :2]
     b1, b2 = aff.params[1, :2]
-    a3 = 13.5 * (1 - a1 - a2)
-    b3 = 13.5 * (1 - b1 - b2)
+    a3 = center[0] * (1 - a1 - a2)
+    b3 = center[1] * (1 - b1 - b2)
     aff = transform.AffineTransform(rotation=c, translation=[a3, b3])
 
     x = np.array(x) / 255.
@@ -730,13 +755,15 @@ def rotate(x, severity=3):
 def rotate_fixed(x, severity=5):
     pi = math.pi
     c = [pi/8., pi/6., pi/4., pi/3., pi/2.][severity - 1]
+    # Todo: why is the center e.g. 13.5 rather than 14 for 28x28 image? (Guess is to do with zero-indexing)
+    center = ((x.shape[0] / 2) - 0.5, (x.shape[1] / 2) - 0.5)
 
     aff = transform.AffineTransform(rotation=c)
 
     a1, a2 = aff.params[0, :2]
     b1, b2 = aff.params[1, :2]
-    a3 = 13.5 * (1 - a1 - a2)
-    b3 = 13.5 * (1 - b1 - b2)
+    a3 = center[0] * (1 - a1 - a2)
+    b3 = center[1] * (1 - b1 - b2)
     aff = transform.AffineTransform(rotation=c, translation=[a3, b3])
 
     x = np.array(x) / 255.
@@ -745,15 +772,30 @@ def rotate_fixed(x, severity=5):
     return x.astype(np.float32)
 
 
+def prescale_pad_black(x, severity=5):
+    #  Only tested with severity=5, severity should be set same as in scale
+    c = [(1 / .9, 1 / .9), (1 / .8, 1 / .8), (1 / .7, 1 / .7), (1 / .6, 1 / .6), (1 / .5, 1 / .5)][severity - 1]
+    x = np.array(x) / 255.
+    # This may overpad, may be possible to divide by 2 (as each side of the image is padded)
+    # However, since we crop down to size, it doesn't really matter.
+    pad_ax_1 = int(np.ceil(x.shape[0] * (c[0] - 1)))
+    pad_ax_2 = int(np.ceil(x.shape[1] * (c[1] - 1)))
+    x = np.pad(x, ((pad_ax_1, pad_ax_1), (pad_ax_2, pad_ax_2)), 'constant', constant_values=0)
+    x = np.clip(x, 0, 1) * 255
+    return x.astype(np.float32)
+
+
 def scale(x, severity=5):
     c = [(1 / .9, 1 / .9), (1 / .8, 1 / .8), (1 / .7, 1 / .7), (1 / .6, 1 / .6), (1 / .5, 1 / .5)][severity - 1]
+    # Todo: why is the center e.g. 13.5 rather than 14 for 28x28 image? (Guess is to do with zero-indexing)
+    center = ((x.shape[0] / 2) - 0.5, (x.shape[1] / 2) - 0.5)
 
     aff = transform.AffineTransform(scale=c)
 
     a1, a2 = aff.params[0, :2]
     b1, b2 = aff.params[1, :2]
-    a3 = 13.5 * (1 - a1 - a2)
-    b3 = 13.5 * (1 - b1 - b2)
+    a3 = center[0] * (1 - a1 - a2)
+    b3 = center[1] * (1 - b1 - b2)
     aff = transform.AffineTransform(scale=c, translation=[a3, b3])
 
     x = np.array(x) / 255.
@@ -762,15 +804,34 @@ def scale(x, severity=5):
     return x.astype(np.float32)
 
 
+def postscale_crop(x, severity=5):
+    #  Only tested with severity=5, severity should be set same as in scale
+    c = [(1 / .9, 1 / .9), (1 / .8, 1 / .8), (1 / .7, 1 / .7), (1 / .6, 1 / .6), (1 / .5, 1 / .5)][severity - 1]
+    curr_shape = x.shape
+    orig_shape = (28, 28)  # Hardcoded
+    x = np.array(x) / 255.
+
+    # Since we pad each side evenly, we know this will divide evenly
+    start_x = (curr_shape[0] - orig_shape[0]) // 2
+    start_y = (curr_shape[1] - orig_shape[1]) // 2
+    end_x = start_x + orig_shape[0]
+    end_y = start_y + orig_shape[1]
+    x = x[start_x:end_x, start_y:end_y]
+
+    x = np.clip(x, 0, 1) * 255
+    return x.astype(np.float32)
+
 def thinning(x, severity=5):
     c = [(1 / .9, 1.), (1 / .8, 1.), (1 / .7, 1.), (1 / .6, 1.), (1 / .5, 1.)][severity - 1]
+    # Todo: why is the center e.g. 13.5 rather than 14 for 28x28 image? (Guess is to do with zero-indexing)
+    center = ((x.shape[0] / 2) - 0.5, (x.shape[1] / 2) - 0.5)
 
     aff = transform.AffineTransform(scale=c)
 
     a1, a2 = aff.params[0, :2]
     b1, b2 = aff.params[1, :2]
-    a3 = 13.5 * (1 - a1 - a2)
-    b3 = 13.5 * (1 - b1 - b2)
+    a3 = center[0] * (1 - a1 - a2)
+    b3 = center[1] * (1 - b1 - b2)
     aff = transform.AffineTransform(scale=c, translation=[a3, b3])
 
     x = np.array(x) / 255.

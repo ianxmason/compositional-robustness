@@ -7,6 +7,7 @@ import pickle
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from copy import deepcopy
 from data.data_transforms import denormalize
 from data.data_loaders import get_static_emnist_dataloaders
 from lib.networks import DTN, DTN_half
@@ -172,27 +173,69 @@ def contrastive_layer_loss(features, single_corr_bs, dev, temperature=0.15, comp
         loss = contrastive_criterion(logits, labels)
     elif len(compare) == 3:
         # Explanation: https://github.com/sthalles/SimCLR/issues/16  https://github.com/sthalles/SimCLR/issues/33
-        zero_logits = torch.cat([positives[:, 0:1], negatives], dim=1)
-        zero_logits = zero_logits / temperature
-        zero_labels = torch.zeros(zero_logits.shape[0], dtype=torch.long).to(dev)
+        logits_1 = torch.cat([positives[:, 0:1], negatives], dim=1)
+        logits_1 = logits_1 / temperature
+        labels_1 = torch.zeros(logits_1.shape[0], dtype=torch.long).to(dev)
 
-        one_logits = torch.cat([positives[:, 1:2], negatives], dim=1)
-        one_logits = one_logits / temperature
-        one_labels = torch.ones(one_logits.shape[0], dtype=torch.long).to(dev)
-
-        # Todo: make sure am really happy with the contrastive loss for >2 corruptions/positive pairs
+        logits_2 = torch.cat([positives[:, 1:2], negatives], dim=1)
+        logits_2 = logits_2 / temperature
+        labels_2 = torch.zeros(logits_2.shape[0], dtype=torch.long).to(dev)
 
         # Todo: there is weirdness here. All positive pairs are captured but not 'considered' in the same way
         # i.e. we don't take every possible pair of f1/f2/f3 and get all positive and negatives
         # rather we have some positives and some negatives and make things close/far
         # Overall I think it should be okay but can think a bit more about it
-        # Also can try larger batch size/different temperature may help.
-        loss = contrastive_criterion(zero_logits, zero_labels)
-        loss += contrastive_criterion(one_logits, one_labels)
+        # Todo: Try larger batch size/different temperature may help.
+        loss = contrastive_criterion(logits_1, labels_1)
+        loss += contrastive_criterion(logits_2, labels_2)
     else:
         raise NotImplementedError("Only currently handles 2 or 3 corruptions")
 
     return loss
+
+
+def supervised_contrastive_layer_loss(features, gt_labels, single_corr_bs, dev, temperature=0.15, compare=(1, 2)):
+    """
+    Include the labels in the contrastive loss so positive pairs are all samples with the same label
+    """
+    if compare == ():
+        return torch.tensor(0.0).to(dev)
+    assert len(features) % single_corr_bs == 0
+    features = F.normalize(features, dim=1)
+
+    # Need to slice away unused labels as we do with features to handle 2 corruptions
+    features = torch.cat([features[(i - 1) * single_corr_bs:i * single_corr_bs] for i in compare], dim=0)
+    gt_labels = torch.cat([gt_labels[(i - 1) * single_corr_bs:i * single_corr_bs] for i in compare], dim=0)
+
+    # Make labels which is 1 at i,j when gt_labels[i] == gt_labels[j]
+    labels = (gt_labels.unsqueeze(0) == gt_labels.unsqueeze(1)).float()
+    labels = labels.to(dev)
+
+    similarity_matrix = torch.matmul(features, features.T)
+    # discard the main diagonal from both: labels and similarities matrix
+    mask = torch.eye(labels.shape[0], dtype=torch.bool).to(dev)
+    labels = labels[~mask].view(labels.shape[0], -1)
+    similarity_matrix = similarity_matrix[~mask].view(similarity_matrix.shape[0], -1)
+
+    contrastive_criterion = torch.nn.CrossEntropyLoss()
+    # For each row in similarity matrix separate out into positive and negative similarity scores
+    # and add their contribution to the loss
+    # Cannot do it all with one matrix as there may be different numbers of positives and negatives and hence
+    # different dimensionality
+    loss = 0.0
+    num_positives = 0
+    zero_label = torch.zeros(1, dtype=torch.long).to(dev)
+    for i in range(similarity_matrix.shape[0]):
+        positives = similarity_matrix[i, labels[i].bool()]
+        negatives = similarity_matrix[i, ~labels[i].bool()]
+        for j in range(len(positives)):
+            logits = torch.cat([positives[j:j+1], negatives], dim=0)
+            logits = logits / temperature
+            logits = logits.view(1, -1)
+            loss += contrastive_criterion(logits, zero_label)
+        num_positives += len(positives)
+
+    return loss / num_positives
 
 
 # Todo: docs say hooks should really be used for visualising and debugging. Maybe we should split the forward
@@ -217,8 +260,9 @@ class FlatConvHook:  # We calculate invariance using the max but max is not diff
         self.hook.remove()
 
 
-def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_classes, max_epochs, batch_size, lr,
-         weights, compare_corrs, experiment_name, n_workers, pin_mem, dev, vis_data, check_if_run):
+def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_classes, min_epochs, max_epochs, batch_size,
+         lr, weights, compare_corrs, experiment_name, n_workers, pin_mem, dev, vis_data, check_if_run):
+    assert max_epochs > min_epochs
     # Train all models
     for corruption_names in corruptions:
         ckpt_name = "{}_{}.pt".format('-'.join(corruption_names), experiment_name)
@@ -246,10 +290,13 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
             val_dls.append(val_dl)
             tst_dls.append(tst_dl)
 
-        # Todo: if continue add the composition validation accuracy in a non-hardcoded way
-        # composition = "rotate_fixed-scale"
-        # _, comp_dl, _ = get_static_emnist_dataloaders(os.path.join(data_root, composition), train_classes,
-        #                                              batch_size, False, n_workers, pin_mem)
+        # Todo: add both directions of composition?
+        # Todo: this may crash for any number other than 2 corruptions.
+        validation_corrs = deepcopy(corruption_names)
+        validation_corrs.remove('identity')
+        composition = '-'.join(validation_corrs)
+        _, comp_dl, _ = get_static_emnist_dataloaders(os.path.join(data_root, composition), train_classes,
+                                                     batch_size, False, n_workers, pin_mem)
 
         if vis_data:
             for i, trn_dl in enumerate(trn_dls):
@@ -336,10 +383,14 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
                 features = network.conv_params(x_trn)
                 features = features.view(features.size(0), -1)
                 features = network.fc_params(features)
-                inv_loss += l4w * contrastive_layer_loss(features, single_corr_bs, dev, compare=comp4)
-                inv_loss += l1w * contrastive_layer_loss(hooked_conv.output, single_corr_bs, dev, compare=comp1)
-                inv_loss += l2w * contrastive_layer_loss(hooked_conv2.output, single_corr_bs, dev, compare=comp2)
-                inv_loss += l3w * contrastive_layer_loss(hooked_conv3.output, single_corr_bs, dev, compare=comp3)
+                if "supervised" in experiment_name:
+                    inv_loss += l4w * supervised_contrastive_layer_loss(features, y_trn, single_corr_bs, dev,
+                                                                        compare=comp4)
+                else:
+                    inv_loss += l4w * contrastive_layer_loss(features, single_corr_bs, dev, compare=comp4)
+                    inv_loss += l1w * contrastive_layer_loss(hooked_conv.output, single_corr_bs, dev, compare=comp1)
+                    inv_loss += l2w * contrastive_layer_loss(hooked_conv2.output, single_corr_bs, dev, compare=comp2)
+                    inv_loss += l3w * contrastive_layer_loss(hooked_conv3.output, single_corr_bs, dev, compare=comp3)
                 output = network.classifier(features)
                 ce_loss = criterion(output, y_trn)
                 loss = ce_loss + inv_loss
@@ -376,10 +427,14 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
                     features = network.conv_params(x_val)
                     features = features.view(features.size(0), -1)
                     features = network.fc_params(features)
-                    inv_loss += l4w * contrastive_layer_loss(features, single_corr_bs, dev, compare=comp4)
-                    inv_loss += l1w * contrastive_layer_loss(hooked_conv.output, single_corr_bs, dev, compare=comp1)
-                    inv_loss += l2w * contrastive_layer_loss(hooked_conv2.output, single_corr_bs, dev, compare=comp2)
-                    inv_loss += l3w * contrastive_layer_loss(hooked_conv3.output, single_corr_bs, dev, compare=comp3)
+                    if "supervised" in experiment_name:
+                        inv_loss += l4w * supervised_contrastive_layer_loss(features, y_val, single_corr_bs, dev,
+                                                                            compare=comp4)
+                    else:
+                        inv_loss += l4w * contrastive_layer_loss(features, single_corr_bs, dev, compare=comp4)
+                        inv_loss += l1w * contrastive_layer_loss(hooked_conv.output, single_corr_bs, dev, compare=comp1)
+                        inv_loss += l2w * contrastive_layer_loss(hooked_conv2.output, single_corr_bs, dev, compare=comp2)
+                        inv_loss += l3w * contrastive_layer_loss(hooked_conv3.output, single_corr_bs, dev, compare=comp3)
                     output = network.classifier(features)
                     ce_loss = criterion(output, y_val)
                     loss = ce_loss + inv_loss
@@ -393,28 +448,29 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
             logger.info("Validation total loss {:6.4f}".format(valid_loss / len(val_dls[0])))
             logger.info("Validation accuracy {:6.3f}".format(valid_acc / len(val_dls[0])))
 
-            # comp_loss = 0.0
-            # comp_acc = 0.0
-            # with torch.no_grad():
-            #     for data_tuple in comp_dl:
-            #         x_val, y_val = data_tuple[0].to(dev), data_tuple[1].to(dev)
-            #         features = network.conv_params(x_val)
-            #         features = features.view(features.size(0), -1)
-            #         features = network.fc_params(features)
-            #         output = network.classifier(features)
-            #         loss = criterion(output, y_val)
-            #         acc = accuracy(output, y_val)
-            #         comp_loss += loss.item()
-            #         comp_acc += acc
-            # logger.info("Composition CE loss {:6.4f}".format(comp_loss / len(comp_dl)))
-            # logger.info("Composition accuracy {:6.3f}".format(comp_acc / len(comp_dl)))
+            comp_loss = 0.0
+            comp_acc = 0.0
+            with torch.no_grad():
+                for data_tuple in comp_dl:
+                    x_val, y_val = data_tuple[0].to(dev), data_tuple[1].to(dev)
+                    features = network.conv_params(x_val)
+                    features = features.view(features.size(0), -1)
+                    features = network.fc_params(features)
+                    output = network.classifier(features)
+                    loss = criterion(output, y_val)
+                    acc = accuracy(output, y_val)
+                    comp_loss += loss.item()
+                    comp_acc += acc
+            logger.info("Composition CE loss {:6.4f}".format(comp_loss / len(comp_dl)))
+            logger.info("Composition accuracy {:6.3f}".format(comp_acc / len(comp_dl)))
 
             # Early Stopping
-            early_stopping(valid_loss / len(val_dls[0]), network)  # ES on loss
-            # early_stopping(100. - (valid_acc / len(val_dls[0]), network)  # ES on acc
-            if early_stopping.early_stop:
-                logger.info("Early stopping")
-                break
+            if epoch > min_epochs:
+                early_stopping(valid_loss / len(val_dls[0]), network)  # ES on loss
+                # early_stopping(100. - (valid_acc / len(val_dls[0]), network)  # ES on acc
+                if early_stopping.early_stop:
+                    logger.info("Early stopping")
+                    break
 
         # Save model
         logger.info("Loading early stopped checkpoint")
@@ -437,10 +493,14 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
                 features = network.conv_params(x_val)
                 features = features.view(features.size(0), -1)
                 features = network.fc_params(features)
-                inv_loss += l4w * contrastive_layer_loss(features, single_corr_bs, dev, compare=comp4)
-                inv_loss += l1w * contrastive_layer_loss(hooked_conv.output, single_corr_bs, dev, compare=comp1)
-                inv_loss += l2w * contrastive_layer_loss(hooked_conv2.output, single_corr_bs, dev, compare=comp2)
-                inv_loss += l3w * contrastive_layer_loss(hooked_conv3.output, single_corr_bs, dev, compare=comp3)
+                if "supervised" in experiment_name:
+                    inv_loss += l4w * supervised_contrastive_layer_loss(features, y_val, single_corr_bs, dev,
+                                                                        compare=comp4)
+                else:
+                    inv_loss += l4w * contrastive_layer_loss(features, single_corr_bs, dev, compare=comp4)
+                    inv_loss += l1w * contrastive_layer_loss(hooked_conv.output, single_corr_bs, dev, compare=comp1)
+                    inv_loss += l2w * contrastive_layer_loss(hooked_conv2.output, single_corr_bs, dev, compare=comp2)
+                    inv_loss += l3w * contrastive_layer_loss(hooked_conv3.output, single_corr_bs, dev, compare=comp3)
                 output = network.classifier(features)
                 ce_loss = criterion(output, y_val)
                 loss = ce_loss + inv_loss
@@ -466,15 +526,16 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Args to train networks on different corruptions.')
-    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST2/',
+    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST3/',
                         help="path to directory containing directories of different corruptions")
-    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST2/',
+    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST3/',
                         help="path to directory to save checkpoints")
-    parser.add_argument('--logging-path', type=str, default='/om2/user/imason/compositions/logs/EMNIST2/',
+    parser.add_argument('--logging-path', type=str, default='/om2/user/imason/compositions/logs/EMNIST3/',
                         help="path to directory to save logs")
-    parser.add_argument('--vis-path', type=str, default='/om2/user/imason/compositions/figs/EMNIST2/visualisations/',
+    parser.add_argument('--vis-path', type=str, default='/om2/user/imason/compositions/figs/EMNIST3/visualisations/',
                         help="path to directory to save data visualisations")
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
+    parser.add_argument('--min-epochs', type=int, default=10, help="min number of training epochs")
     parser.add_argument('--max-epochs', type=int, default=50, help="max number of training epochs")
     parser.add_argument('--batch-size', type=int, default=128, help="batch size")
     parser.add_argument('--lr', type=float, default=1e-3, help="learning rate")
@@ -486,6 +547,7 @@ if __name__ == "__main__":
     # Each corruption adds 3*num_workers. So for 3 corruptions ask for 3*3*num_workers=18 cores
     # With 2 workers and 18 cores still get some hanging
     # With 1 worker and 18 cores seems to hang less (maybe never - not checked training over all shifts)
+    # May well be worth trying setting to 0 and using 2 cores to use less resources - see if hangs
     parser.add_argument('--pin-mem', action='store_true', help="set to turn pin memory on (PyTorch)")
     parser.add_argument('--cpu', action='store_true', help="set to train with the cpu (PyTorch) - untested")
     parser.add_argument('--vis-data', action='store_true', help="set to save a png of one batch of data")
@@ -523,29 +585,67 @@ if __name__ == "__main__":
     else:
         compare_corrs = None
 
-    # # Hardcode to see if interesting
-    # corruptions = [['identity', 'rotate_fixed', 'scale']]
-
     # Get all pairs of corruptions (plus identity)
     with open(os.path.join(args.data_root, "corruption_names.pkl"), "rb") as f:
         all_corruptions = pickle.load(f)
-
     corruptions = []
     # Always include identity, remove permutations
     for corr in all_corruptions:
         if 'identity' not in corr:
+            corr.sort()
             corr += ['identity']
-            corr.sort()
             if corr not in corruptions and len(corr) == 3:
                 corruptions.append(corr)
+        elif len(corr) == 1:  # identity only
+            pass  # only want to add pairs for now
         else:
-            corr.sort()
-            if corr not in corruptions and len(corr) == 3:
-                corruptions.append(corr)
+            raise ValueError("Only expect the identity to appear as its own corruption")
 
     # Using slurm to parallelise the training
-    corruptions = corruptions[args.corruption_ID:args.corruption_ID + 1]
+    # corruptions = corruptions[args.corruption_ID:args.corruption_ID + 1]
+    """
+    Hardcoding for rapid experimentation - comment in an additional validation loss on the corruption itself
+    Aim is to get the original corruptions up to 88% accuracy which hopefully improves the composition accuracy
+    Todo: not hard to unhardcore this validation accuracy for future experiments over multiple corruptions
+    
+    Some thing to try
+        - Change LR (1e-1, 1e-2, 1e-4)
+        - Change weighting, e.g. to 1, to 5. Change CE to 0.1 and inv loss to 1.
+        - Optimiser??? (Reluctant to change optimiser)
+        - Is there ever a network capacity question?
+    
+    Run the command:
+    CUDA_VISIBLE_DEVICES=4 python train_compositions_invariance_loss.py --ckpt-path /om2/user/imason/compositions/ckpts/EMNIST_TEMP/ --logging-path /om2/user/imason/compositions/logs/EMNIST_TEMP/ --experiment-name "supervised-invariance-loss" --weights "0,0,0,10" --compare-corrs ",,,123" --pin-mem
+    """
+    # corruptions = [['identity', 'rotate_fixed', 'scale']]
 
+    """
+    Some hyperparameter search. Run N hparam settings. As we have 15 pairs, this is N*15 jobs at once.
+    Run the invariance loss command in train_compositions_invariance_loss.sh
+    but change --array=0-14 to --array=0-89  (for 90 jobs == 6 settings)
+    
+    What about temperature of the contrastive loss?
+    
+    While waiting for openmind to get sorted run this with ID between 15 and 29 on polestar
+    CUDA_VISIBLE_DEVICES=3 python train_compositions_invariance_loss.py  --experiment-name "invariance-loss" --weights "0,0,0,10" --compare-corrs ",,,123" --pin-mem --check-if-run --corruption-ID 15
+    """
+    # assert len(corruptions) == 15
+    # exps = [(1e-3, 0.1), (1e-3, 1.), (1e-3, 10.), (1e-3, 100.)]
+    # exp = exps[args.corruption_ID // 15]  # 15 == len(corruptions)
+    # corruptions = corruptions[(args.corruption_ID % len(corruptions)):(args.corruption_ID % len(corruptions)) + 1]
+    # args.lr = exp[0]
+    # weights = [0., 0., 0., exp[1]]  #
+    # args.experiment_name = args.experiment_name + "-lr-" + str(exp[0]) + "-w-" + str(exp[1])
+
+    """
+    For running different invariance exps (e.g. L1-L2 etc)
+    """
+    assert len(corruptions) == 15
+    corruptions = corruptions[(args.corruption_ID % len(corruptions)):(args.corruption_ID % len(corruptions)) + 1]
+    args.experiment_name = args.experiment_name + "-lr-" + str(args.lr)
+
+
+    assert args.n_workers != 0  # Seems this is a problem - needs investigating
     main(corruptions, args.data_root, args.ckpt_path, args.logging_path, args.vis_path, args.total_n_classes,
-         args.max_epochs, args.batch_size, args.lr, weights, compare_corrs, args.experiment_name, args.n_workers,
-         args.pin_mem, dev, args.vis_data, args.check_if_run)
+         args.min_epochs, args.max_epochs, args.batch_size, args.lr, weights, compare_corrs, args.experiment_name,
+         args.n_workers, args.pin_mem, dev, args.vis_data, args.check_if_run)

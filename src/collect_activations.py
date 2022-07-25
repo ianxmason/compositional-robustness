@@ -6,6 +6,7 @@ import os
 import torch
 import torch.nn as nn
 import pickle
+from copy import deepcopy
 from data.data_loaders import get_static_emnist_dataloaders
 from lib.networks import DTN
 from lib.utils import *
@@ -38,12 +39,15 @@ class FiringLinHook:
         self.hook.remove()
 
 
-def main(network_corruptions, data_corruptions, data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers,
-         pin_mem, dev, check_if_run):
+def main(network_corruptions, data_corruptions, data_root, ckpt_path, save_path, total_n_classes, batch_size,
+         experiment_name, n_workers, pin_mem, dev, check_if_run):
     # Loop over networks being analysed
     for network_corruption in network_corruptions:
         # Load each ckpt into the network
-        ckpt_name = "{}_invariance-loss.pt".format('-'.join(network_corruption))
+        if experiment_name != '':
+            ckpt_name = "{}_{}.pt".format('-'.join(network_corruption), experiment_name)
+        else:
+            ckpt_name = "{}.pt".format('-'.join(network_corruption))
         network = DTN(total_n_classes).to(dev)
         network.load_state_dict(torch.load(os.path.join(ckpt_path, ckpt_name)))
         network.eval()
@@ -75,7 +79,7 @@ def main(network_corruptions, data_corruptions, data_root, ckpt_path, save_path,
         # Loop over data corruptions
         for data_corruption in data_corruptions:
             data_name = "{}".format('-'.join(data_corruption))
-            fname = "avg_firing_rates_network_{}_data_{}_invariance-loss.pkl".format(ckpt_name[:-3], data_name)
+            fname = "avg_firing_rates_network_{}_data_{}.pkl".format(ckpt_name[:-3], data_name)
             corruption_path = os.path.join(data_root, data_name)
             trained_classes = list(range(total_n_classes))
             if check_if_run and os.path.exists(os.path.join(save_path, fname)):
@@ -158,19 +162,21 @@ def main(network_corruptions, data_corruptions, data_root, ckpt_path, save_path,
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Collect activations for different corruptions and compositions')
-    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST/',
+    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST2/',
                         help="path to directory containing directories of different corruptions")
-    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST/',
+    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST2/',
                         help="path to directory to save checkpoints")
-    parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/activations/EMNIST/',
+    parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/activations/EMNIST2/',
                         help="path to directory to save test accuracies and losses")
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
     parser.add_argument('--batch-size', type=int, default=128, help="batch size")
-    parser.add_argument('--n-workers', type=int, default=4, help="number of workers (PyTorch)")
+    parser.add_argument('--n-workers', type=int, default=2, help="number of workers (PyTorch)")
     parser.add_argument('--pin-mem', action='store_true', help="set to turn pin memory on (PyTorch)")
     parser.add_argument('--cpu', action='store_true', help="set to train with the cpu (PyTorch) - untested")
     parser.add_argument('--check-if-run', action='store_true', help="If set, skips corruptions for which activations"
                                                                     " have already been collected. Useful for slurm.")
+    parser.add_argument('--experiment-name', type=str, default='',
+                        help="name of experiment - used to load the checkpoint files")
     args = parser.parse_args()
 
     # Set device
@@ -209,22 +215,56 @@ if __name__ == "__main__":
 
 
     # For violin plots across corruptions. --check-if-run flag will avoid duplicate calculations
-    networks = [['identity', 'gaussian_blur', 'stripe'],
-                ['identity', 'impulse_noise', 'gaussian_blur'],
-                ['identity', 'impulse_noise', 'inverse'],
-                ['identity', 'impulse_noise', 'stripe'],
-                ['identity', 'inverse', 'gaussian_blur'],
-                ['identity', 'inverse', 'stripe']]
+    # networks = [['identity', 'gaussian_blur', 'stripe'],
+    #             ['identity', 'impulse_noise', 'gaussian_blur'],
+    #             ['identity', 'impulse_noise', 'inverse'],
+    #             ['identity', 'impulse_noise', 'stripe'],
+    #             ['identity', 'inverse', 'gaussian_blur'],
+    #             ['identity', 'inverse', 'stripe']]
+    #
+    # networks = [['identity', 'rotate_fixed', 'scale']]
+    #
+    # for network in networks:
+    #     network_corruptions = [network, [network[0]] + [network[1]], [network[0]] + [network[2]]]
+    #     data_corruptions = [[network_corruptions[0][0]],
+    #                         [network_corruptions[0][1]],
+    #                         [network_corruptions[0][2]],
+    #                         [network_corruptions[0][1], network_corruptions[0][2]],
+    #                         [network_corruptions[0][2], network_corruptions[0][1]]]
+    #
+    #     main(network_corruptions, data_corruptions, args.data_root, args.ckpt_path, args.save_path,
+    #          args.total_n_classes, args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run)
 
-    networks = [['identity', 'rotate_fixed', 'scale']]
+    # For violin plots across compositions with new data. --check-if-run flag will avoid duplicate calculations
+    # In the long run may wish to parallelize using slurm - currently just run each experiment-name separately
+    # CUDA_VISIBLE_DEVICES=2 python collect_activations.py --pin-mem --check-if-run
+    # settings for --experiment-name: default_arg=='', invariance-loss-lr-0.001-w-1.0, L1-L2-all-invariance-loss-lr-0.001, L1-L2-invariance-loss-lr-0.001
+    networks = [['gaussian_blur', 'identity', 'impulse_noise'],
+                ['gaussian_blur', 'identity', 'inverse'],
+                ['gaussian_blur', 'identity', 'rotate_fixed'],
+                ['gaussian_blur', 'identity', 'scale'],
+                ['gaussian_blur', 'identity', 'thinning'],
+                ['identity', 'impulse_noise', 'inverse'],
+                ['identity', 'impulse_noise', 'rotate_fixed'],
+                ['identity', 'impulse_noise', 'scale'],
+                ['identity', 'impulse_noise', 'thinning'],
+                ['identity', 'inverse', 'rotate_fixed'],
+                ['identity', 'inverse', 'scale'],
+                ['identity', 'inverse', 'thinning'],
+                ['identity', 'rotate_fixed', 'scale'],
+                ['identity', 'rotate_fixed', 'thinning'],
+                ['identity', 'scale', 'thinning']]
 
     for network in networks:
-        network_corruptions = [network, [network[0]] + [network[1]], [network[0]] + [network[2]]]
-        data_corruptions = [[network_corruptions[0][0]],
-                            [network_corruptions[0][1]],
-                            [network_corruptions[0][2]],
-                            [network_corruptions[0][1], network_corruptions[0][2]],
-                            [network_corruptions[0][2], network_corruptions[0][1]]]
+        network_corruptions = [network]
+        data = deepcopy(network)
+        data.remove('identity')
+        data_corruptions = [['identity'],
+                            [data[0]],
+                            [data[1]],
+                            [data[0], data[1]],
+                            [data[1], data[0]]]
 
         main(network_corruptions, data_corruptions, args.data_root, args.ckpt_path, args.save_path,
-             args.total_n_classes, args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run)
+             args.total_n_classes, args.batch_size, args.experiment_name, args.n_workers, args.pin_mem, dev,
+             args.check_if_run)

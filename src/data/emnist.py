@@ -307,7 +307,7 @@ if __name__ == "__main__":
 
     # PATHS
     root_dir = "/om2/user/imason/compositions/datasets/"
-    output_dir = os.path.join(root_dir, "EMNIST2/")
+    output_dir = os.path.join(root_dir, "EMNIST3/")
 
     if create_datasets:
         # LOAD EMNIST DATA
@@ -340,6 +340,12 @@ if __name__ == "__main__":
             #         corruption_names.append(c_name)
             #         corruption_paths.append(c_path)
             #         corruption_fns.append([getattr(dt, c) for c in c_names])
+
+            # All corruptions begin with prescaling (padding with black) and end by cropping out the centre 28x28
+            # This avoids problems with borders of the images.
+            for c_fns in corruption_fns:
+                c_fns.insert(0, getattr(dt, "prescale_pad_black"))
+                c_fns.append(getattr(dt, "postscale_crop"))
 
             # Create datasets
             _create_emnist_target_datasets(sorted_imgs, sorted_labels, corruption_fns, corruption_names,

@@ -21,8 +21,9 @@ from lib.utils import *
     # Todo: neatening - write the early stopping output to the logger, so we can see the last saved es_ckpt
 
 
-def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_classes, max_epochs, batch_size, lr,
-         n_workers, pin_mem, dev, vis_data, check_if_run):
+def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_classes, min_epochs, max_epochs,
+         batch_size, lr, n_workers, pin_mem, dev, vis_data, check_if_run):
+    assert max_epochs > min_epochs
     # Train all models
     for corruption_names in corruptions:
         ckpt_name = "{}.pt".format('-'.join(corruption_names))
@@ -96,11 +97,12 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
                     logger.info("Validation loss {:6.4f}".format(valid_loss / len(val_dl)))
                     logger.info("Validation accuracy {:6.3f}".format(valid_acc / len(val_dl)))
                     # Early Stopping
-                    early_stopping(valid_loss / len(val_dl), network)  # ES on loss
-                    # early_stopping(100. - (valid_acc / len(val_dl)), network)  # ES on acc
-                    if early_stopping.early_stop:
-                        logger.info("Early stopping")
-                        break
+                    if epoch > min_epochs:
+                        early_stopping(valid_loss / len(val_dl), network)  # ES on loss
+                        # early_stopping(100. - (valid_acc / len(val_dl)), network)  # ES on acc
+                        if early_stopping.early_stop:
+                            logger.info("Early stopping")
+                            break
                     network.train()
 
             if early_stopping.early_stop:
@@ -132,15 +134,16 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Args to train networks on different corruptions.')
-    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST2/',
+    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST3/',
                         help="path to directory containing directories of different corruptions")
-    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST2/',
+    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST3/',
                         help="path to directory to save checkpoints")
-    parser.add_argument('--logging-path', type=str, default='/om2/user/imason/compositions/logs/EMNIST2/',
+    parser.add_argument('--logging-path', type=str, default='/om2/user/imason/compositions/logs/EMNIST3/',
                         help="path to directory to save logs")
-    parser.add_argument('--vis-path', type=str, default='/om2/user/imason/compositions/figs/EMNIST2/visualisations/',
+    parser.add_argument('--vis-path', type=str, default='/om2/user/imason/compositions/figs/EMNIST3/visualisations/',
                         help="path to directory to save data visualisations")
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
+    parser.add_argument('--min-epochs', type=int, default=10, help="min number of training epochs")
     parser.add_argument('--max-epochs', type=int, default=50, help="max number of training epochs")
     parser.add_argument('--batch-size', type=int, default=128, help="batch size")
     parser.add_argument('--lr', type=float, default=1e-3, help="learning rate")
@@ -209,19 +212,21 @@ if __name__ == "__main__":
     # Always include identity, remove permutations
     for corr in all_corruptions:
         if 'identity' not in corr:
-            corr += ['identity']
             corr.sort()
+            corr += ['identity']
+            if corr not in corruptions:
+                corruptions.append(corr)
+        elif len(corr) == 1:  # identity only
             if corr not in corruptions:
                 corruptions.append(corr)
         else:
-            corr.sort()
-            if corr not in corruptions:
-                corruptions.append(corr)
+            raise ValueError("Only expect the identity to appear as its own corruption")
 
     # Using slurm to parallelise the training
     corruptions = corruptions[args.corruption_ID:args.corruption_ID+1]
 
     main(corruptions, args.data_root, args.ckpt_path, args.logging_path, args.vis_path, args.total_n_classes,
-         args.max_epochs, args.batch_size, args.lr, args.n_workers, args.pin_mem, dev, args.vis_data, args.check_if_run)
+         args.min_epochs, args.max_epochs, args.batch_size, args.lr, args.n_workers, args.pin_mem, dev, args.vis_data,
+         args.check_if_run)
 
 
