@@ -162,11 +162,11 @@ def main(network_corruptions, data_corruptions, data_root, ckpt_path, save_path,
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Collect activations for different corruptions and compositions')
-    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST2/',
+    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST3/',
                         help="path to directory containing directories of different corruptions")
-    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST2/',
+    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST3/',
                         help="path to directory to save checkpoints")
-    parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/activations/EMNIST2/',
+    parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/activations/EMNIST3/',
                         help="path to directory to save test accuracies and losses")
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
     parser.add_argument('--batch-size', type=int, default=128, help="batch size")
@@ -237,23 +237,43 @@ if __name__ == "__main__":
 
     # For violin plots across compositions with new data. --check-if-run flag will avoid duplicate calculations
     # In the long run may wish to parallelize using slurm - currently just run each experiment-name separately
-    # CUDA_VISIBLE_DEVICES=2 python collect_activations.py --pin-mem --check-if-run
+    # CUDA_VISIBLE_DEVICES=2 python collect_activations.py --pin-mem --check-if-run --experiment_name SEE BELOW
+
+    # EMNIST2
     # settings for --experiment-name: default_arg=='', invariance-loss-lr-0.001-w-1.0, L1-L2-all-invariance-loss-lr-0.001, L1-L2-invariance-loss-lr-0.001
-    networks = [['gaussian_blur', 'identity', 'impulse_noise'],
-                ['gaussian_blur', 'identity', 'inverse'],
-                ['gaussian_blur', 'identity', 'rotate_fixed'],
-                ['gaussian_blur', 'identity', 'scale'],
-                ['gaussian_blur', 'identity', 'thinning'],
-                ['identity', 'impulse_noise', 'inverse'],
-                ['identity', 'impulse_noise', 'rotate_fixed'],
-                ['identity', 'impulse_noise', 'scale'],
-                ['identity', 'impulse_noise', 'thinning'],
-                ['identity', 'inverse', 'rotate_fixed'],
-                ['identity', 'inverse', 'scale'],
-                ['identity', 'inverse', 'thinning'],
-                ['identity', 'rotate_fixed', 'scale'],
-                ['identity', 'rotate_fixed', 'thinning'],
-                ['identity', 'scale', 'thinning']]
+    # networks = [['gaussian_blur', 'identity', 'impulse_noise'],
+    #             ['gaussian_blur', 'identity', 'inverse'],
+    #             ['gaussian_blur', 'identity', 'rotate_fixed'],
+    #             ['gaussian_blur', 'identity', 'scale'],
+    #             ['gaussian_blur', 'identity', 'thinning'],
+    #             ['identity', 'impulse_noise', 'inverse'],
+    #             ['identity', 'impulse_noise', 'rotate_fixed'],
+    #             ['identity', 'impulse_noise', 'scale'],
+    #             ['identity', 'impulse_noise', 'thinning'],
+    #             ['identity', 'inverse', 'rotate_fixed'],
+    #             ['identity', 'inverse', 'scale'],
+    #             ['identity', 'inverse', 'thinning'],
+    #             ['identity', 'rotate_fixed', 'scale'],
+    #             ['identity', 'rotate_fixed', 'thinning'],
+    #             ['identity', 'scale', 'thinning']]
+
+    # EMNIST3
+    # settings for --experiment-name: default_arg=='', invariance-loss-lr-0.001, L1-L2-all-invariance-loss-lr-0.001, L1-L2-bwd-invariance-loss-lr-0.001, L1-L2-fwd-invariance-loss-lr-0.001
+    networks = [['gaussian_blur', 'impulse_noise', 'identity'],
+                ['gaussian_blur', 'inverse', 'identity'],
+                ['gaussian_blur', 'rotate_fixed', 'identity'],
+                ['gaussian_blur', 'scale', 'identity'],
+                ['gaussian_blur', 'shear_fixed', 'identity'],
+                ['impulse_noise', 'inverse', 'identity'],
+                ['impulse_noise', 'rotate_fixed', 'identity'],
+                ['impulse_noise', 'scale', 'identity'],
+                ['impulse_noise', 'shear_fixed', 'identity'],
+                ['inverse', 'rotate_fixed', 'identity'],
+                ['inverse', 'scale', 'identity'],
+                ['inverse', 'shear_fixed', 'identity'],
+                ['rotate_fixed', 'scale', 'identity'],
+                ['rotate_fixed', 'shear_fixed', 'identity'],
+                ['scale', 'shear_fixed', 'identity']]
 
     for network in networks:
         network_corruptions = [network]

@@ -26,7 +26,7 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
     assert max_epochs > min_epochs
     # Train all models
     for corruption_names in corruptions:
-        ckpt_name = "{}.pt".format('-'.join(corruption_names))
+        ckpt_name = "{}-{}.pt".format('-'.join(corruption_names), lr)
         # Check if training has already completed for the corruption(s) in question.
         if check_if_run and os.path.exists(os.path.join(ckpt_path, ckpt_name)):
             print("Checkpoint already exists at {}. \n Skipping training on corruption(s): {}".format(
@@ -34,7 +34,7 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
             continue
 
         # Log File set up
-        log_name = "{}.log".format('-'.join(corruption_names))
+        log_name = "{}-{}.log".format('-'.join(corruption_names), lr)
         logger = custom_logger(os.path.join(logging_path, log_name), stdout=False)  # stdout True to see also in console
         print("Logging file created to train on corruption(s): {}".format(corruption_names))
         # Data Set Up
@@ -46,7 +46,7 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
 
         if vis_data:
             x, y = next(iter(trn_dl))
-            fig_name = "{}.png".format('-'.join(corruption_names))
+            fig_name = "{}-{}.png".format('-'.join(corruption_names), lr)
             fig_path = os.path.join(vis_path, fig_name)
             # Denormalise Images
             x = x.detach().cpu().numpy()
@@ -59,7 +59,7 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
         network = DTN(total_n_classes).to(dev)
         optim = torch.optim.Adam(network.parameters(), lr)
         criterion = nn.CrossEntropyLoss()
-        es_ckpt_path = os.path.join(ckpt_path, "es_ckpt_{}.pt".format('-'.join(corruption_names)))
+        es_ckpt_path = os.path.join(ckpt_path, "es_ckpt_{}-{}.pt".format('-'.join(corruption_names), lr))
         early_stopping = EarlyStopping(patience=25, verbose=True, path=es_ckpt_path)
 
         # Train Loop
@@ -223,7 +223,14 @@ if __name__ == "__main__":
             raise ValueError("Only expect the identity to appear as its own corruption")
 
     # Using slurm to parallelise the training
-    corruptions = corruptions[args.corruption_ID:args.corruption_ID+1]
+    # corruptions = corruptions[args.corruption_ID:args.corruption_ID+1]
+
+    # Searching learning rates. Change --array=0-47 to --array=0-191
+    assert len(corruptions) == 48  # for EMNIST3
+    lrs = [1e-1, 1e-2, 1e-3, 1e-4]
+    exp_idx = args.corruption_ID // 48
+    corruptions = corruptions[(args.corruption_ID % len(corruptions)):(args.corruption_ID % len(corruptions)) + 1]
+    args.lr = lrs[exp_idx]
 
     main(corruptions, args.data_root, args.ckpt_path, args.logging_path, args.vis_path, args.total_n_classes,
          args.min_epochs, args.max_epochs, args.batch_size, args.lr, args.n_workers, args.pin_mem, dev, args.vis_data,

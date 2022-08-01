@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH -t 6:00:00                  #  walltime hh:mm:ss
+#SBATCH -t 6:00:00                   #  walltime hh:mm:ss
 #SBATCH -N 1                         #  one node
 #SBATCH -n 2                         #  CPU cores
 #SBATCH -x dgx001,dgx002,node[093,094,097,098,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115]  #  had this issue https://github.mit.edu/MGHPCC/OpenMind/issues/3375
 #SBATCH -o /om2/user/imason/compositions/slurm/EMNIST3/slurm-%j.out    # file to send output to
-#SBATCH --array=0-14                 #  submit each of the 15 pairs of corruptions as a separate job. Or a hparam search.
+#SBATCH --array=0-269                #  submit each of the 15 pairs of corruptions as a separate job. Or a hparam search.
 #SBATCH --mem=12G                    #  RAM
 #SBATCH --gres=gpu:1                 #  one GPU
 #SBATCH --constraint=11GB            #  any-gpu any gpu on cluster (may not be compatible with pytorch.

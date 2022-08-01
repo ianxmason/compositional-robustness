@@ -261,7 +261,7 @@ class FlatConvHook:  # We calculate invariance using the max but max is not diff
 
 
 def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_classes, min_epochs, max_epochs, batch_size,
-         lr, weights, compare_corrs, experiment_name, n_workers, pin_mem, dev, vis_data, check_if_run):
+         lr, weights, temperature, compare_corrs, experiment_name, n_workers, pin_mem, dev, vis_data, check_if_run):
     assert max_epochs > min_epochs
     # Train all models
     for corruption_names in corruptions:
@@ -385,12 +385,16 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
                 features = network.fc_params(features)
                 if "supervised" in experiment_name:
                     inv_loss += l4w * supervised_contrastive_layer_loss(features, y_trn, single_corr_bs, dev,
-                                                                        compare=comp4)
+                                                                        temperature=temperature, compare=comp4)
                 else:
-                    inv_loss += l4w * contrastive_layer_loss(features, single_corr_bs, dev, compare=comp4)
-                    inv_loss += l1w * contrastive_layer_loss(hooked_conv.output, single_corr_bs, dev, compare=comp1)
-                    inv_loss += l2w * contrastive_layer_loss(hooked_conv2.output, single_corr_bs, dev, compare=comp2)
-                    inv_loss += l3w * contrastive_layer_loss(hooked_conv3.output, single_corr_bs, dev, compare=comp3)
+                    inv_loss += l4w * contrastive_layer_loss(features, single_corr_bs, dev,
+                                                             temperature=temperature, compare=comp4)
+                    inv_loss += l1w * contrastive_layer_loss(hooked_conv.output, single_corr_bs, dev,
+                                                             temperature=temperature, compare=comp1)
+                    inv_loss += l2w * contrastive_layer_loss(hooked_conv2.output, single_corr_bs, dev,
+                                                             temperature=temperature, compare=comp2)
+                    inv_loss += l3w * contrastive_layer_loss(hooked_conv3.output, single_corr_bs, dev,
+                                                             temperature=temperature, compare=comp3)
                 output = network.classifier(features)
                 ce_loss = criterion(output, y_trn)
                 loss = ce_loss + inv_loss
@@ -429,12 +433,16 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
                     features = network.fc_params(features)
                     if "supervised" in experiment_name:
                         inv_loss += l4w * supervised_contrastive_layer_loss(features, y_val, single_corr_bs, dev,
-                                                                            compare=comp4)
+                                                                            temperature=temperature, compare=comp4)
                     else:
-                        inv_loss += l4w * contrastive_layer_loss(features, single_corr_bs, dev, compare=comp4)
-                        inv_loss += l1w * contrastive_layer_loss(hooked_conv.output, single_corr_bs, dev, compare=comp1)
-                        inv_loss += l2w * contrastive_layer_loss(hooked_conv2.output, single_corr_bs, dev, compare=comp2)
-                        inv_loss += l3w * contrastive_layer_loss(hooked_conv3.output, single_corr_bs, dev, compare=comp3)
+                        inv_loss += l4w * contrastive_layer_loss(features, single_corr_bs, dev,
+                                                                 temperature=temperature, compare=comp4)
+                        inv_loss += l1w * contrastive_layer_loss(hooked_conv.output, single_corr_bs, dev,
+                                                                 temperature=temperature, compare=comp1)
+                        inv_loss += l2w * contrastive_layer_loss(hooked_conv2.output, single_corr_bs, dev,
+                                                                 temperature=temperature, compare=comp2)
+                        inv_loss += l3w * contrastive_layer_loss(hooked_conv3.output, single_corr_bs, dev,
+                                                                 temperature=temperature, compare=comp3)
                     output = network.classifier(features)
                     ce_loss = criterion(output, y_val)
                     loss = ce_loss + inv_loss
@@ -495,12 +503,16 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
                 features = network.fc_params(features)
                 if "supervised" in experiment_name:
                     inv_loss += l4w * supervised_contrastive_layer_loss(features, y_val, single_corr_bs, dev,
-                                                                        compare=comp4)
+                                                                        temperature=temperature, compare=comp4)
                 else:
-                    inv_loss += l4w * contrastive_layer_loss(features, single_corr_bs, dev, compare=comp4)
-                    inv_loss += l1w * contrastive_layer_loss(hooked_conv.output, single_corr_bs, dev, compare=comp1)
-                    inv_loss += l2w * contrastive_layer_loss(hooked_conv2.output, single_corr_bs, dev, compare=comp2)
-                    inv_loss += l3w * contrastive_layer_loss(hooked_conv3.output, single_corr_bs, dev, compare=comp3)
+                    inv_loss += l4w * contrastive_layer_loss(features, single_corr_bs, dev,
+                                                             temperature=temperature, compare=comp4)
+                    inv_loss += l1w * contrastive_layer_loss(hooked_conv.output, single_corr_bs, dev,
+                                                             temperature=temperature, compare=comp1)
+                    inv_loss += l2w * contrastive_layer_loss(hooked_conv2.output, single_corr_bs, dev,
+                                                             temperature=temperature, compare=comp2)
+                    inv_loss += l3w * contrastive_layer_loss(hooked_conv3.output, single_corr_bs, dev,
+                                                             temperature=temperature, compare=comp3)
                 output = network.classifier(features)
                 ce_loss = criterion(output, y_val)
                 loss = ce_loss + inv_loss
@@ -539,6 +551,7 @@ if __name__ == "__main__":
     parser.add_argument('--max-epochs', type=int, default=50, help="max number of training epochs")
     parser.add_argument('--batch-size', type=int, default=128, help="batch size")
     parser.add_argument('--lr', type=float, default=1e-3, help="learning rate")
+    parser.add_argument('--temperature', type=float, default=0.15, help="contrastive loss temperature")
     parser.add_argument('--n-workers', type=int, default=1, help="number of workers (PyTorch)")
     # 4 workers seems to cause hanging. Likely due to zipping multiple dataloaders each with 4 workers
     # https://stackoverflow.com/questions/53998282/how-does-the-number-of-workers-parameter-in-pytorch-dataloader-actually-work
@@ -622,30 +635,38 @@ if __name__ == "__main__":
     """
     Some hyperparameter search. Run N hparam settings. As we have 15 pairs, this is N*15 jobs at once.
     Run the invariance loss command in train_compositions_invariance_loss.sh
-    but change --array=0-14 to --array=0-89  (for 90 jobs == 6 settings)
+    but change --array=0-14 to --array=0-269  (for 270 jobs == 18 settings)
     
-    What about temperature of the contrastive loss?
     
     While waiting for openmind to get sorted run this with ID between 15 and 29 on polestar
     CUDA_VISIBLE_DEVICES=3 python train_compositions_invariance_loss.py  --experiment-name "invariance-loss" --weights "0,0,0,10" --compare-corrs ",,,123" --pin-mem --check-if-run --corruption-ID 15
     """
-    # assert len(corruptions) == 15
-    # exps = [(1e-3, 0.1), (1e-3, 1.), (1e-3, 10.), (1e-3, 100.)]
-    # exp = exps[args.corruption_ID // 15]  # 15 == len(corruptions)
-    # corruptions = corruptions[(args.corruption_ID % len(corruptions)):(args.corruption_ID % len(corruptions)) + 1]
-    # args.lr = exp[0]
-    # weights = [0., 0., 0., exp[1]]  #
-    # args.experiment_name = args.experiment_name + "-lr-" + str(exp[0]) + "-w-" + str(exp[1])
+    assert len(corruptions) == 15
+    batch_sizes = [128, 256]
+    temperatures = [0.05, 0.15, 0.25]
+    all_weights = [[0., 0., 0., 0.1], [0., 0., 0., 1.], [0., 0., 0., 10.]]
+    possible_exps = []
+    for batch_size in batch_sizes:
+        for temperature in temperatures:
+            for ws in all_weights:
+                possible_exps.append([batch_size, temperature, ws])
+
+    exp_idx = args.corruption_ID // 15
+    corruptions = corruptions[(args.corruption_ID % len(corruptions)):(args.corruption_ID % len(corruptions)) + 1]
+    args.batch_size = possible_exps[exp_idx][0]
+    args.temperature = possible_exps[exp_idx][1]
+    weights = possible_exps[exp_idx][2]
+    args.experiment_name = args.experiment_name + "-lr-" + str(args.lr) + "-w-" + str(weights[-1]) + \
+                           "-bs-" + str(args.batch_size) + "-temp-" + str(args.temperature)
 
     """
     For running different invariance exps (e.g. L1-L2 etc)
     """
-    assert len(corruptions) == 15
-    corruptions = corruptions[(args.corruption_ID % len(corruptions)):(args.corruption_ID % len(corruptions)) + 1]
-    args.experiment_name = args.experiment_name + "-lr-" + str(args.lr)
-
+    # assert len(corruptions) == 15
+    # corruptions = corruptions[(args.corruption_ID % len(corruptions)):(args.corruption_ID % len(corruptions)) + 1]
+    # args.experiment_name = args.experiment_name + "-lr-" + str(args.lr)
 
     assert args.n_workers != 0  # Seems this is a problem - needs investigating
     main(corruptions, args.data_root, args.ckpt_path, args.logging_path, args.vis_path, args.total_n_classes,
-         args.min_epochs, args.max_epochs, args.batch_size, args.lr, weights, compare_corrs, args.experiment_name,
-         args.n_workers, args.pin_mem, dev, args.vis_data, args.check_if_run)
+         args.min_epochs, args.max_epochs, args.batch_size, args.lr, weights, args.temperature, compare_corrs,
+         args.experiment_name, args.n_workers, args.pin_mem, dev, args.vis_data, args.check_if_run)
