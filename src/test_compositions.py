@@ -49,9 +49,11 @@ def main(data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers
         if check_if_run and os.path.exists(os.path.join(save_path, "{}_losses.pkl".format(ckpt[:-3]))):
             print("Pickle file already exists at {}. \n Skipping testing for {}".format(
                 os.path.join(save_path, "{}_losses.pkl".format(ckpt[:-3])), ckpt))
+            sys.stdout.flush()
             continue
         if "es_" == ckpt[:3]:  # don't want to test early stopping ckpts
             print("Skipped early stopping ckpt {}".format(ckpt))
+            sys.stdout.flush()
             continue
         if "equivariant" in ckpt:
             network = DTN_half(total_n_classes).to(dev)
@@ -59,11 +61,13 @@ def main(data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers
                 if isinstance(module, nn.Conv2d):
                     rot_hook = RotationHook(module)
                     print("Hooked module: {}".format(module))
+                    sys.stdout.flush()
                     break
         else:
             network = DTN(total_n_classes).to(dev)
         network.load_state_dict(torch.load(os.path.join(ckpt_path, ckpt)))
         print("Testing {}".format(ckpt))
+        sys.stdout.flush()
 
         # Test the trained models on all existing corruptions and compositions
         corruption_accs = {}
@@ -80,6 +84,7 @@ def main(data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers
             corruption_accs[test_corruption] = tst_acc
             corruption_losses[test_corruption] = tst_loss
             print("{}. test loss: {:.4f}, test acc: {:.4f}".format(test_corruption, tst_loss, tst_acc))
+            sys.stdout.flush()
 
         # Save the results
         with open(os.path.join(save_path, "{}_accs.pkl".format(ckpt[:-3])), "wb") as f:
@@ -100,7 +105,7 @@ if __name__ == "__main__":
                         help="path to directory to save test accuracies and losses")
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
     parser.add_argument('--batch-size', type=int, default=128, help="batch size")
-    parser.add_argument('--n-workers', type=int, default=4, help="number of workers (PyTorch)")
+    parser.add_argument('--n-workers', type=int, default=2, help="number of workers (PyTorch)")
     parser.add_argument('--pin-mem', action='store_true', help="set to turn pin memory on (PyTorch)")
     parser.add_argument('--cpu', action='store_true', help="set to train with the cpu (PyTorch) - untested")
     parser.add_argument('--check-if-run', action='store_true', help="If set, skips corruptions for which training has"

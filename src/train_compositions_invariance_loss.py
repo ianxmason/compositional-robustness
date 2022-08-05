@@ -326,8 +326,14 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
             if isinstance(module, nn.Conv2d):
                 conv_count += 1
                 if conv_count == 1 and "equivariant" in experiment_name:
-                    rot_hook = RotationHook(module)
+                    # rot_hook = RotationHook(module)
                     # scale_hook = ScaleHook(module)
+                    # inv_hook = SimpleInverseHook(module)
+                    pass
+                    print("Hooked module: {}".format(module))
+                if conv_count == 3 and "equivariant" in experiment_name:
+                    # inv_hook = SimpleInverseHook(module)
+                    rot_hook_2 = RotationHook(module)
                     print("Hooked module: {}".format(module))
             if isinstance(module, nn.ReLU):
                 if conv_count == 1:
@@ -527,7 +533,9 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
         logger.info("Early Stopped validation accuracy {:6.3f}".format(valid_acc / len(val_dls[0])))
         early_stopping.delete_checkpoint()  # Removes from disk
         if "equivariant" in experiment_name:
-            rot_hook.close()
+            # rot_hook.close()
+            rot_hook_2.close()
+            # inv_hook.close()
             # scale_hook.close()
         hooked_conv.close()
         hooked_conv2.close()
@@ -629,8 +637,13 @@ if __name__ == "__main__":
     
     Run the command:
     CUDA_VISIBLE_DEVICES=4 python train_compositions_invariance_loss.py --ckpt-path /om2/user/imason/compositions/ckpts/EMNIST_TEMP/ --logging-path /om2/user/imason/compositions/logs/EMNIST_TEMP/ --experiment-name "supervised-invariance-loss" --weights "0,0,0,10" --compare-corrs ",,,123" --pin-mem
+    
+    To try equivariance with rotate_fixed, inverse
+    CUDA_VISIBLE_DEVICES=4 python train_compositions_invariance_loss.py --ckpt-path /om2/user/imason/compositions/ckpts/EMNIST_TEMP/ --logging-path /om2/user/imason/compositions/logs/EMNIST_TEMP/ --experiment-name "equivariant" --weights "0,0,0,0" --compare-corrs ",,," --pin-mem
+    CUDA_VISIBLE_DEVICES=3 python train_compositions_invariance_loss.py --ckpt-path /om2/user/imason/compositions/ckpts/EMNIST_TEMP/ --logging-path /om2/user/imason/compositions/logs/EMNIST_TEMP/ --experiment-name "equivariant-invariance-loss" --weights "0,0,0,1" --compare-corrs ",,,123" --pin-mem
     """
     # corruptions = [['identity', 'rotate_fixed', 'scale']]
+    corruptions = [['identity', 'rotate_fixed', 'inverse']]
 
     """
     Some hyperparameter search. Run N hparam settings. As we have 15 pairs, this is N*15 jobs at once.
@@ -641,23 +654,23 @@ if __name__ == "__main__":
     While waiting for openmind to get sorted run this with ID between 15 and 29 on polestar
     CUDA_VISIBLE_DEVICES=3 python train_compositions_invariance_loss.py  --experiment-name "invariance-loss" --weights "0,0,0,10" --compare-corrs ",,,123" --pin-mem --check-if-run --corruption-ID 15
     """
-    assert len(corruptions) == 15
-    batch_sizes = [128, 256]
-    temperatures = [0.05, 0.15, 0.25]
-    all_weights = [[0., 0., 0., 0.1], [0., 0., 0., 1.], [0., 0., 0., 10.]]
-    possible_exps = []
-    for batch_size in batch_sizes:
-        for temperature in temperatures:
-            for ws in all_weights:
-                possible_exps.append([batch_size, temperature, ws])
-
-    exp_idx = args.corruption_ID // 15
-    corruptions = corruptions[(args.corruption_ID % len(corruptions)):(args.corruption_ID % len(corruptions)) + 1]
-    args.batch_size = possible_exps[exp_idx][0]
-    args.temperature = possible_exps[exp_idx][1]
-    weights = possible_exps[exp_idx][2]
-    args.experiment_name = args.experiment_name + "-lr-" + str(args.lr) + "-w-" + str(weights[-1]) + \
-                           "-bs-" + str(args.batch_size) + "-temp-" + str(args.temperature)
+    # assert len(corruptions) == 15
+    # batch_sizes = [128, 256]
+    # temperatures = [0.05, 0.15, 0.25]
+    # all_weights = [[0., 0., 0., 0.1], [0., 0., 0., 1.], [0., 0., 0., 10.]]
+    # possible_exps = []
+    # for batch_size in batch_sizes:
+    #     for temperature in temperatures:
+    #         for ws in all_weights:
+    #             possible_exps.append([batch_size, temperature, ws])
+    #
+    # exp_idx = args.corruption_ID // 15
+    # corruptions = corruptions[(args.corruption_ID % len(corruptions)):(args.corruption_ID % len(corruptions)) + 1]
+    # args.batch_size = possible_exps[exp_idx][0]
+    # args.temperature = possible_exps[exp_idx][1]
+    # weights = possible_exps[exp_idx][2]
+    # args.experiment_name = args.experiment_name + "-lr-" + str(args.lr) + "-w-" + str(weights[-1]) + \
+    #                        "-bs-" + str(args.batch_size) + "-temp-" + str(args.temperature)
 
     """
     For running different invariance exps (e.g. L1-L2 etc)

@@ -42,6 +42,34 @@ class RotationHook:
         self.hook.remove()
 
 
+class SimpleInverseHook:
+    """
+    A simple test inverse hook.
+    Flips the sign of all weights (since images are normalised to -1,1)
+    Not sure this is a general solution to inverse or not (particularly if we are deep in the network)
+    May not even be correct???
+    """
+    def __init__(self, module):
+        self.hook = module.register_forward_hook(self.hook_fn)
+
+    def hook_fn(self, module, input, output):
+        weight = module.weight.data
+        bias = module.bias.data
+
+        # Invert the weights
+        transformed_weight = -weight
+
+        # From the _conv_forward method in the torch.nn.Conv2d class
+        transformed_filters_output = F.conv2d(input[0], transformed_weight, bias, module.stride, module.padding,
+                                              module.dilation, module.groups)
+
+        return torch.cat((output, transformed_filters_output), dim=1)
+
+    def close(self):
+        self.hook.remove()
+
+
+# Todo: not sure this is right at all. Does scaling even make sense for equivariance?
 class ScaleHook:
     def __init__(self, module, severity=5):
         self.severity = severity
