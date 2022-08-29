@@ -88,11 +88,11 @@ class DTN_Part_One(nn.Module):
             nn.Conv2d(3, 64, kernel_size=5, stride=2, padding=2),
             nn.BatchNorm2d(64),
             nn.Dropout2d(0.1),
-            nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2),
-            nn.BatchNorm2d(128),
-            nn.Dropout2d(0.3),
             nn.ReLU()
+            # nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2),
+            # nn.BatchNorm2d(128),
+            # nn.Dropout2d(0.3),
+            # nn.ReLU()
         )
 
     def forward(self, x):
@@ -106,6 +106,10 @@ class DTN_Part_Two(nn.Module):
         # Todo: (maybe/opt) - set num filters, batch norm size etc. dynamically based on number of corruptions/equivariant
         # hooks. Atm is all done manually - e.g. set first layer to 32 to use one hook, then batch norm 64 afterwards etc.
         self.conv_params = nn.Sequential(
+            nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2),
+            nn.BatchNorm2d(128),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
             nn.Conv2d(128, 256, kernel_size=5, stride=2, padding=2),
             nn.BatchNorm2d(256),
             nn.Dropout2d(0.5),
@@ -135,16 +139,80 @@ class Filter_Bank(nn.Module):
         # Todo: (maybe/opt) - set num filters, batch norm size etc. dynamically based on number of corruptions/equivariant
         # hooks. Atm is all done manually - e.g. set first layer to 32 to use one hook, then batch norm 64 afterwards etc.
         self.conv_params = nn.Sequential(
-            nn.Conv2d(128, 128, kernel_size=5, stride=1, padding=2),
-            nn.BatchNorm2d(128),
+            nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm2d(64),
             nn.Dropout2d(0.3),
             nn.ReLU(),
-            nn.Conv2d(128, 128, kernel_size=5, stride=1, padding=2),
-            nn.BatchNorm2d(128),
+            nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm2d(64),
             nn.Dropout2d(0.3),
             nn.ReLU()
+
+            # nn.Conv2d(128, 128, kernel_size=5, stride=1, padding=2),
+            # nn.BatchNorm2d(128),
+            # nn.Dropout2d(0.3),
+            # nn.ReLU(),
+            # nn.Conv2d(128, 128, kernel_size=5, stride=1, padding=2),
+            # nn.BatchNorm2d(128),
+            # nn.Dropout2d(0.3),
+            # nn.ReLU()
         )
 
     def forward(self, x):
         y = self.conv_params(x)
         return y
+
+
+class SimpleConvBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, batch_norm=True, dropout=0.0,
+                 activation=nn.ReLU()):
+        super(SimpleConvBlock, self).__init__()
+
+        if batch_norm:
+            self.conv_params = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding),
+                nn.BatchNorm2d(out_channels),
+                nn.Dropout2d(dropout),
+                activation
+            )
+        else:
+            self.conv_params = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding),
+                nn.Dropout2d(dropout),
+                activation
+            )
+
+    def forward(self, x):
+        return self.conv_params(x)
+
+
+class SimpleFullyConnectedBlock(nn.Module):
+    def __init__(self, in_features, out_features, batch_norm=True, dropout=0.0, activation=nn.ReLU()):
+        super(SimpleFullyConnectedBlock, self).__init__()
+
+        if batch_norm:
+            self.fc_params = nn.Sequential(
+                nn.Linear(in_features, out_features),
+                nn.BatchNorm1d(out_features),
+                nn.Dropout(dropout),
+                activation
+            )
+        else:
+            self.fc_params = nn.Sequential(
+                nn.Linear(in_features, out_features),
+                nn.Dropout(dropout),
+                activation
+            )
+
+    def forward(self, x):
+        return self.fc_params(x)
+
+
+class SimpleClassifier(nn.Module):
+    def __init__(self, in_features, out_features):
+        super(SimpleClassifier, self).__init__()
+
+        self.classifier = nn.Linear(in_features, out_features)
+
+    def forward(self, x):
+        return self.classifier(x)

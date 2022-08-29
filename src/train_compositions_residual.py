@@ -254,11 +254,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Args to train networks on different corruptions.')
     parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST3/',
                         help="path to directory containing directories of different corruptions")
-    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST3/',
+    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST_TEMP/',
                         help="path to directory to save checkpoints")
-    parser.add_argument('--logging-path', type=str, default='/om2/user/imason/compositions/logs/EMNIST3/',
+    parser.add_argument('--logging-path', type=str, default='/om2/user/imason/compositions/logs/EMNIST_TEMP/',
                         help="path to directory to save logs")
-    parser.add_argument('--vis-path', type=str, default='/om2/user/imason/compositions/figs/EMNIST3/visualisations/',
+    parser.add_argument('--vis-path', type=str, default='/om2/user/imason/compositions/figs/EMNIST_TEMP/visualisations/',
                         help="path to directory to save data visualisations")
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
     parser.add_argument('--min-epochs', type=int, default=10, help="min number of training epochs")

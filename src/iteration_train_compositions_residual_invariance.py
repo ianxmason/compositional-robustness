@@ -16,6 +16,26 @@ from lib.utils import *
 from lib.equivariant_hooks import *
 
 
+"""
+Want to set up code so can rapidly test
+    - Module location
+    - Module capacity
+    - BN/dropout on/off
+    - Identity net in train or eval mode?
+    - Joint training feed-forward part with noise+blur, then adding the others
+        - Invariance loss in first layer or in penultimate layer?
+    - Supervised contrastive
+    
+How to do this
+    - Train only 3-5 epochs - train on each corruption in parallel on openmind
+        - Also need some testing code for a few corruptions to check
+        - Those that give some signal we can train for longer
+    - Change network structure to give a conv block with args for capacity, BN, dropout
+        - Set up the whole network so that the architecture is defined in this file and we can easily move the modules around
+    - Supervised contrastive - need to make it a lot faster - some way to vectorize?
+        - Check the comments in contrastive_layer_loss and be sure we are happy with it
+"""
+
 def contrastive_layer_loss(features, single_corr_bs, dev, temperature=0.15, compare=(1, 2)):
     if compare == ():
         return torch.tensor(0.0).to(dev)
