@@ -88,11 +88,11 @@ class DTN_Part_One(nn.Module):
             nn.Conv2d(3, 64, kernel_size=5, stride=2, padding=2),
             nn.BatchNorm2d(64),
             nn.Dropout2d(0.1),
+            nn.ReLU(),
+            nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2),
+            nn.BatchNorm2d(128),
+            nn.Dropout2d(0.3),
             nn.ReLU()
-            # nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2),
-            # nn.BatchNorm2d(128),
-            # nn.Dropout2d(0.3),
-            # nn.ReLU()
         )
 
     def forward(self, x):
@@ -106,10 +106,10 @@ class DTN_Part_Two(nn.Module):
         # Todo: (maybe/opt) - set num filters, batch norm size etc. dynamically based on number of corruptions/equivariant
         # hooks. Atm is all done manually - e.g. set first layer to 32 to use one hook, then batch norm 64 afterwards etc.
         self.conv_params = nn.Sequential(
-            nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2),
-            nn.BatchNorm2d(128),
-            nn.Dropout2d(0.3),
-            nn.ReLU(),
+            # nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2),
+            # nn.BatchNorm2d(128),
+            # nn.Dropout2d(0.3),
+            # nn.ReLU(),
             nn.Conv2d(128, 256, kernel_size=5, stride=2, padding=2),
             nn.BatchNorm2d(256),
             nn.Dropout2d(0.5),
@@ -139,23 +139,61 @@ class Filter_Bank(nn.Module):
         # Todo: (maybe/opt) - set num filters, batch norm size etc. dynamically based on number of corruptions/equivariant
         # hooks. Atm is all done manually - e.g. set first layer to 32 to use one hook, then batch norm 64 afterwards etc.
         self.conv_params = nn.Sequential(
-            nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
-            nn.BatchNorm2d(64),
+            # nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
+            # nn.BatchNorm2d(64),
+            # nn.Dropout2d(0.3),
+            # nn.ReLU(),
+            # nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
+            # nn.BatchNorm2d(64),
+            # nn.Dropout2d(0.3),
+            # nn.ReLU()
+
+            nn.Conv2d(128, 128, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm2d(128),
             nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.Conv2d(128, 128, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm2d(128),
+            nn.Dropout2d(0.3),
+            nn.ReLU()
+        )
+
+    def forward(self, x):
+        y = self.conv_params(x)
+        return y
+
+
+class Filter_Bank_Before_Net(nn.Module):
+    def __init__(self):
+        super(Filter_Bank_Before_Net, self).__init__()
+        # Todo: optional - make this a mini autoencoder in terms of shape - eg. 3 channels -> 64 channels -> 3 channels
+        # Todo: use dropout, batch norm etc???
+        # Todo: combine the two filter bank set ups so we can just take shapes of layers as inpots
+        self.conv_params = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm2d(64),
+            nn.Dropout2d(0.1),
             nn.ReLU(),
             nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
             nn.BatchNorm2d(64),
             nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.Conv2d(64, 3, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm2d(3),
+            nn.Dropout2d(0.1),
             nn.ReLU()
+        )
 
-            # nn.Conv2d(128, 128, kernel_size=5, stride=1, padding=2),
-            # nn.BatchNorm2d(128),
-            # nn.Dropout2d(0.3),
-            # nn.ReLU(),
-            # nn.Conv2d(128, 128, kernel_size=5, stride=1, padding=2),
-            # nn.BatchNorm2d(128),
-            # nn.Dropout2d(0.3),
-            # nn.ReLU()
+    def forward(self, x):
+        y = self.conv_params(x)
+        return y
+
+
+class Filter_Bank_Resad(nn.Module):
+    def __init__(self):
+        super(Filter_Bank_Resad, self).__init__()
+        self.conv_params = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=5, stride=2, padding=2)
         )
 
     def forward(self, x):
@@ -216,3 +254,5 @@ class SimpleClassifier(nn.Module):
 
     def forward(self, x):
         return self.classifier(x)
+
+
