@@ -141,7 +141,7 @@ def loss_and_accuracy(network_one, network_two, filter_banks, dataloader):
     return test_loss / len(dataloader), test_acc / len(dataloader)
 
 
-def loss_and_accuracy_resads(network_one, network_two, network_three, test_corruption,
+def loss_and_accuracy_resads(network_one, network_two, network_three, network_four, network_five, test_corruption,
                              filter_banks, dataloader):
     test_corruptions = test_corruption.split("-")
     if filter_banks is not None:
@@ -150,7 +150,8 @@ def loss_and_accuracy_resads(network_one, network_two, network_three, test_corru
     network_one.eval()
     network_two.eval()
     network_three.eval()
-    # network_four.eval()
+    network_four.eval()
+    network_five.eval()
     if filter_banks is not None:
         for filter_bank in filter_banks:
             filter_bank.eval()
@@ -188,19 +189,34 @@ def loss_and_accuracy_resads(network_one, network_two, network_three, test_corru
             # output = network_four(features)
 
             # Different location serial filter bank case
+            # if filter_banks is not None:
+            #     for tc, fb in zip(test_corruptions, filter_banks):
+            #         if tc == "impulse_noise" or tc == "gaussian_blur" or tc == "inverse":
+            #             features = fb(features)
+            #
+            # features = network_two(features)
+            #
+            # if filter_banks is not None:
+            #     for tc, fb in zip(test_corruptions, filter_banks):
+            #         if tc == "rotate_fixed" or tc == "scale" or tc == "shear_fixed":
+            #             features = fb(features)
+            #
+            # output = network_three(features)
+
+            # Different location serial filter bank with the more general network structure
             if filter_banks is not None:
                 for tc, fb in zip(test_corruptions, filter_banks):
                     if tc == "impulse_noise" or tc == "gaussian_blur" or tc == "inverse":
                         features = fb(features)
 
-            features = network_two(features)
+            features = network_three(network_two(features))
 
             if filter_banks is not None:
                 for tc, fb in zip(test_corruptions, filter_banks):
                     if tc == "rotate_fixed" or tc == "scale" or tc == "shear_fixed":
                         features = fb(features)
 
-            output = network_three(features)
+            output = network_five(network_four(features))
 
             loss = criterion(output, y_tst)
             acc = accuracy(output, y_tst)
@@ -283,32 +299,53 @@ def main(data_root, ckpt_path, save_path, total_n_classes, batch_size, experimen
         #                ).to(dev)
 
         # For in series adapters at different layers - again BN is now off
+        # network_one = nn.Sequential(
+        #                 SimpleConvBlock(3, 64, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.1),  # 0.1
+        #               ).to(dev)
+        # network_two = nn.Sequential(
+        #                 SimpleConvBlock(64, 128, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.3),  # 0.3
+        #                 SimpleConvBlock(128, 256, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.5)  # 0.5
+        #               ).to(dev)
+        # network_three = nn.Sequential(
+        #                   nn.Flatten(),  # Flattens everything except the batch dimension by default
+        #                   SimpleFullyConnectedBlock(256 * 4 * 4, 512, batch_norm=False, dropout=0.5),  # 0.5
+        #                   SimpleClassifier(512, total_n_classes)
+        #                 ).to(dev)
+
+        # For the general case - as used in automatic module selection
         network_one = nn.Sequential(
-                        SimpleConvBlock(3, 64, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.1),  # 0.1
-                      ).to(dev)
+            SimpleConvBlock(3, 64, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.1)  # 0.1
+        ).to(dev)
         network_two = nn.Sequential(
-                        SimpleConvBlock(64, 128, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.3)  # 0.3
-                      ).to(dev)
+            SimpleConvBlock(64, 128, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.3)  # 0.3
+        ).to(dev)
         network_three = nn.Sequential(
-                          SimpleConvBlock(128, 256, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.5),  # 0.5
-                          nn.Flatten(),  # Flattens everything except the batch dimension by default
-                          SimpleFullyConnectedBlock(256 * 4 * 4, 512, batch_norm=False, dropout=0.5),  # 0.5
-                          SimpleClassifier(512, total_n_classes)
-                        ).to(dev)
+            SimpleConvBlock(128, 256, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.5)  # 0.5
+        ).to(dev)
+        network_four = nn.Sequential(
+            nn.Flatten(),  # Flattens everything except the batch dimension by default
+            SimpleFullyConnectedBlock(256 * 4 * 4, 512, batch_norm=False, dropout=0.5)
+        ).to(dev)
+        network_five = nn.Sequential(
+            SimpleClassifier(512, total_n_classes)
+        ).to(dev)
 
         id_one_ckpt_name = "identity_part_one_{}.pt".format(experiment_name)
         id_two_ckpt_name = "identity_part_two_{}.pt".format(experiment_name)
         id_three_ckpt_name = "identity_part_three_{}.pt".format(experiment_name)
-        # id_four_ckpt_name = "identity_part_four_{}.pt".format(experiment_name)
+        id_four_ckpt_name = "identity_part_four_{}.pt".format(experiment_name)
+        id_five_ckpt_name = "identity_part_five_{}.pt".format(experiment_name)
 
         network_one.load_state_dict(torch.load(os.path.join(ckpt_path, id_one_ckpt_name)))
         print("Loaded identity network part one from checkpoint")
         network_two.load_state_dict(torch.load(os.path.join(ckpt_path, id_two_ckpt_name)))
         print("Loaded identity network part two from checkpoint")
         network_three.load_state_dict(torch.load(os.path.join(ckpt_path, id_three_ckpt_name)))
-        # print("Loaded identity network part three from checkpoint")
-        # network_four.load_state_dict(torch.load(os.path.join(ckpt_path, id_four_ckpt_name)))
+        print("Loaded identity network part three from checkpoint")
+        network_four.load_state_dict(torch.load(os.path.join(ckpt_path, id_four_ckpt_name)))
         print("Loaded identity network part four from checkpoint")
+        network_five.load_state_dict(torch.load(os.path.join(ckpt_path, id_five_ckpt_name)))
+        print("Loaded identity network part five from checkpoint")
         sys.stdout.flush()
 
 
@@ -379,13 +416,13 @@ def main(data_root, ckpt_path, save_path, total_n_classes, batch_size, experimen
                                                           ).to(dev)
                                             )
                     elif tc == "rotate_fixed" or tc == "scale" or tc == "shear_fixed":
-                        filter_banks.append(nn.Sequential(nn.Conv2d(128, 128, kernel_size=5, stride=1, padding=2),
+                        filter_banks.append(nn.Sequential(nn.Conv2d(256, 256, kernel_size=5, stride=1, padding=2),
                                                          # nn.BatchNorm2d(128),
-                                                         nn.Dropout2d(0.3),
+                                                         nn.Dropout2d(0.5),
                                                          nn.ReLU(),
-                                                         nn.Conv2d(128, 128, kernel_size=5, stride=1, padding=2),
+                                                         nn.Conv2d(256, 256, kernel_size=5, stride=1, padding=2),
                                                          # nn.BatchNorm2d(128),
-                                                         nn.Dropout2d(0.3),
+                                                         nn.Dropout2d(0.5),
                                                          nn.ReLU()
                                                          ).to(dev)
                                             )
@@ -420,7 +457,8 @@ def main(data_root, ckpt_path, save_path, total_n_classes, batch_size, experimen
                     sys.stdout.flush()
 
             # tst_loss, tst_acc = loss_and_accuracy(network_one, network_two, filter_banks, tst_dl)
-            tst_loss, tst_acc = loss_and_accuracy_resads(network_one, network_two, network_three, test_corruption, filter_banks, tst_dl)
+            tst_loss, tst_acc = loss_and_accuracy_resads(network_one, network_two, network_three, network_four, network_five,
+                                                         test_corruption, filter_banks, tst_dl)
             corruption_accs[test_corruption] = tst_acc
             corruption_losses[test_corruption] = tst_loss
             print("{}. test loss: {:.4f}, test acc: {:.4f}".format(test_corruption, tst_loss, tst_acc))

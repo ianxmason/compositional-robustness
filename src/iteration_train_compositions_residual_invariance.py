@@ -476,18 +476,37 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
     #                ).to(dev)
 
     # For in series adapters at different layers - again BN is now off
+    # network_one = nn.Sequential(
+    #                 SimpleConvBlock(3, 64, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.1),  # 0.1
+    #               ).to(dev)
+    # network_two = nn.Sequential(
+    #                 SimpleConvBlock(64, 128, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.3),  # 0.3
+    #                 SimpleConvBlock(128, 256, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.5),  # 0.5
+    #               ).to(dev)
+    # network_three = nn.Sequential(
+    #                 nn.Flatten(),  # Flattens everything except the batch dimension by default
+    #                 SimpleFullyConnectedBlock(256 * 4 * 4, 512, batch_norm=False, dropout=0.5),  # 0.5
+    #                 SimpleClassifier(512, total_n_classes)
+    #               ).to(dev)
+
+    # For in series adapters at all possible layers - autoselecting the best layer - again BN is now off
     network_one = nn.Sequential(
-                    SimpleConvBlock(3, 64, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.1),  # 0.1
-                  ).to(dev)
+        SimpleConvBlock(3, 64, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.1)  # 0.1
+    ).to(dev)
     network_two = nn.Sequential(
-                    SimpleConvBlock(64, 128, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.3)  # 0.3
-                  ).to(dev)
+        SimpleConvBlock(64, 128, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.3)  # 0.3
+    ).to(dev)
     network_three = nn.Sequential(
-                    SimpleConvBlock(128, 256, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.5),  # 0.5
-                    nn.Flatten(),  # Flattens everything except the batch dimension by default
-                    SimpleFullyConnectedBlock(256 * 4 * 4, 512, batch_norm=False, dropout=0.5),  # 0.5
-                    SimpleClassifier(512, total_n_classes)
-                  ).to(dev)
+        SimpleConvBlock(128, 256, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.5)  # 0.5
+    ).to(dev)
+    network_four = nn.Sequential(
+        nn.Flatten(),  # Flattens everything except the batch dimension by default
+        SimpleFullyConnectedBlock(256 * 4 * 4, 512, batch_norm=False, dropout=0.5)
+    ).to(dev)
+    network_five = nn.Sequential(
+        SimpleClassifier(512, total_n_classes)
+    ).to(dev)
+
 
     print("##########")
     print(network_one)
@@ -499,7 +518,8 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
     id_one_ckpt_name = "identity_part_one_{}.pt".format(experiment_name)
     id_two_ckpt_name = "identity_part_two_{}.pt".format(experiment_name)
     id_three_ckpt_name = "identity_part_three_{}.pt".format(experiment_name)
-    # id_four_ckpt_name = "identity_part_four_{}.pt".format(experiment_name)
+    id_four_ckpt_name = "identity_part_four_{}.pt".format(experiment_name)
+    id_five_ckpt_name = "identity_part_five_{}.pt".format(experiment_name)
     if os.path.exists(os.path.join(ckpt_path, id_one_ckpt_name)):
         network_one.load_state_dict(torch.load(os.path.join(ckpt_path, id_one_ckpt_name)))
         print("Loaded identity network part one from checkpoint")
@@ -507,8 +527,10 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
         print("Loaded identity network part two from checkpoint")
         network_three.load_state_dict(torch.load(os.path.join(ckpt_path, id_three_ckpt_name)))
         print("Loaded identity network part three from checkpoint")
-        # network_four.load_state_dict(torch.load(os.path.join(ckpt_path, id_four_ckpt_name)))
-        # print("Loaded identity network part four from checkpoint")
+        network_four.load_state_dict(torch.load(os.path.join(ckpt_path, id_four_ckpt_name)))
+        print("Loaded identity network part four from checkpoint")
+        network_five.load_state_dict(torch.load(os.path.join(ckpt_path, id_five_ckpt_name)))
+        print("Loaded identity network part five from checkpoint")
     else:
         # Todo: (?) Careful with parralelisation here, don't want to train identity multiple times.
         print("No identity network checkpoint found. Training identity network")
@@ -523,9 +545,9 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
         #                                                   experiment_name, n_workers, pin_mem, dev)
 
         # Should now handle arbitrary number of networks
-        network_one, network_two, network_three = train_identity_networks(
-                                            [network_one, network_two, network_three],
-                                            [id_one_ckpt_name, id_two_ckpt_name, id_three_ckpt_name],
+        network_one, network_two, network_three, network_four, network_five = train_identity_networks(
+                                            [network_one, network_two, network_three, network_four, network_five],
+                                            [id_one_ckpt_name, id_two_ckpt_name, id_three_ckpt_name, id_four_ckpt_name, id_five_ckpt_name],
                                             data_root, ckpt_path, logging_path, total_n_classes, min_epochs, max_epochs,
                                             batch_size, lr, experiment_name, n_workers, pin_mem, dev)
         # A hack:
@@ -535,7 +557,8 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
     network_one.eval()
     network_two.eval()
     network_three.eval()
-    # network_four.eval()
+    network_four.eval()
+    network_five.eval()
 
     # Train all models
     for corruption_names in corruptions:
@@ -620,28 +643,284 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
         #                     nn.ReLU()
         #                   ).to(dev)
 
+        # if corruption_name == "impulse_noise" or corruption_name == "gaussian_blur" or corruption_name == "inverse":
+        #     filter_bank = nn.Sequential(
+        #                     nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
+        #                     # nn.BatchNorm2d(64),
+        #                     nn.Dropout2d(0.3),
+        #                     nn.ReLU(),
+        #                     nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
+        #                     # nn.BatchNorm2d(64),
+        #                     nn.Dropout2d(0.3),
+        #                     nn.ReLU()
+        #                   ).to(dev)
+        # elif corruption_name == "rotate_fixed" or corruption_name == "scale" or corruption_name == "shear_fixed":
+        #     filter_bank = nn.Sequential(
+        #                     nn.Conv2d(256, 256, kernel_size=5, stride=1, padding=2),
+        #                     # nn.BatchNorm2d(128),
+        #                     nn.Dropout2d(0.5),
+        #                     nn.ReLU(),
+        #                     nn.Conv2d(256, 256, kernel_size=5, stride=1, padding=2),
+        #                     # nn.BatchNorm2d(128),
+        #                     nn.Dropout2d(0.5),
+        #                     nn.ReLU()
+        #                   ).to(dev)
+        # else:
+        #     raise ValueError("Corruption name not recognised")
+
+        filter_bank_one = nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
+            # nn.BatchNorm2d(64),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
+            # nn.BatchNorm2d(64),
+            nn.Dropout2d(0.3),
+            nn.ReLU()
+        ).to(dev)
+
+        filter_bank_two = nn.Sequential(
+            nn.Conv2d(128, 128, kernel_size=5, stride=1, padding=2),
+            # nn.BatchNorm2d(128),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.Conv2d(128, 128, kernel_size=5, stride=1, padding=2),
+            # nn.BatchNorm2d(128),
+            nn.Dropout2d(0.3),
+            nn.ReLU()
+        ).to(dev)
+
+        filter_bank_three = nn.Sequential(
+            nn.Conv2d(256, 256, kernel_size=5, stride=1, padding=2),
+            # nn.BatchNorm2d(128),
+            nn.Dropout2d(0.5),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, kernel_size=5, stride=1, padding=2),
+            # nn.BatchNorm2d(128),
+            nn.Dropout2d(0.5),
+            nn.ReLU()
+        ).to(dev)
+
+        filter_bank_four = nn.Sequential(
+            nn.Linear(512, 512),
+            nn.BatchNorm1d(512),
+            nn.Dropout(0.5),
+            nn.ReLU(),
+            nn.Linear(512, 512),
+            nn.BatchNorm1d(512),
+            nn.Dropout(0.5),
+            nn.ReLU()
+        ).to(dev)
+
+
+
+        """
+        Experiment with automating the level of abstraction 
+        """
+        # networks = [network_one, network_two, network_three, network_four, network_five]
+        # filter_banks = [filter_bank_one, filter_bank_two, filter_bank_three, filter_bank_four]
+        # Todo: is there an issue where the gradients are different magnitudes at different levels of abstraction?
+        # Todo: do the levels of abstraction match with the engineering ones
+        # criterion = nn.CrossEntropyLoss()
+        # filter_bank_results = []
+        # for i, filter_bank in enumerate(filter_banks):
+        #     optim = torch.optim.Adam(filter_bank.parameters(), lr)
+        #     filter_bank.train()
+        #     epoch_ce_loss = 0.0
+        #     epoch_inv_loss = 0.0
+        #     epoch_acc = 0.0
+        #     for j, data_tuples in enumerate(zip(*trn_dls)):
+        #         for k, data_tuple in enumerate(data_tuples):
+        #             if k == 0:
+        #                 x_trn, y_trn = data_tuple[0].to(dev), data_tuple[1].to(dev)
+        #             else:
+        #                 x_temp, y_temp = data_tuple[0].to(dev), data_tuple[1].to(dev)
+        #                 x_trn = torch.cat((x_trn, x_temp), dim=0)
+        #                 y_trn = torch.cat((y_trn, y_temp), dim=0)
+        #
+        #         optim.zero_grad()
+        #
+        #         # Different location serial filter bank case
+        #         features = network_one(x_trn)
+        #
+        #         # Todo: if looks promising this can definitely be made a lot more beautiful
+        #         # Todo: experiment with dropout, batch norm, capacity, invariance loss, etc.
+        #         # Todo: major weirdness in the implementation - we calculate the CE loss on clean and corrupted data!!!!
+        #         #   this means we are asking that the module "does nothing" on the clean data. This is not what we want.
+        #         #   this is another thing to try with and without and see if it improves performance over contrastive losstraining
+        #         # Todo: Monday - careful implementation of all these methods and flexibility - include contrastive loss, supervised contrastive loss, maybe indep. mechanisms etc.
+        #         # Todo: With auto selection may need to check the variance of the accuracy over runs. If it is too high different levels of abstraction may be selected.
+        #         if i == 0:
+        #             id_features = features[:single_corr_bs, :, :, :]
+        #             id_features = id_features.reshape(id_features.shape[0], -1)  # Flatten spatial dimensions
+        #             features = filter_bank(features)
+        #             corr_features = features[single_corr_bs:, :, :, :]
+        #             corr_features = corr_features.reshape(corr_features.shape[0], -1)  # Flatten spatial dimensions
+        #             inv_loss = 1 * contrastive_layer_loss(torch.cat((id_features, corr_features), dim=0),
+        #                                                   single_corr_bs,
+        #                                                   dev, temperature=temperature, compare=(1, 2))
+        #             output = network_five(network_four(network_three(network_two(features))))
+        #         elif i == 1:
+        #             features = network_two(features)
+        #             id_features = features[:single_corr_bs, :, :, :]
+        #             id_features = id_features.reshape(id_features.shape[0], -1)  # Flatten spatial dimensions
+        #             features = filter_bank(features)
+        #             corr_features = features[single_corr_bs:, :, :, :]
+        #             corr_features = corr_features.reshape(corr_features.shape[0], -1)  # Flatten spatial dimensions
+        #             inv_loss = 1 * contrastive_layer_loss(torch.cat((id_features, corr_features), dim=0),
+        #                                                   single_corr_bs,
+        #                                                   dev, temperature=temperature, compare=(1, 2))
+        #             output = network_five(network_four(network_three(features)))
+        #         elif i == 2:
+        #             features = network_three(network_two(features))
+        #             id_features = features[:single_corr_bs, :, :, :]
+        #             id_features = id_features.reshape(id_features.shape[0], -1)  # Flatten spatial dimensions
+        #             features = filter_bank(features)
+        #             corr_features = features[single_corr_bs:, :, :, :]
+        #             corr_features = corr_features.reshape(corr_features.shape[0], -1)  # Flatten spatial dimensions
+        #             inv_loss = 1 * contrastive_layer_loss(torch.cat((id_features, corr_features), dim=0),
+        #                                                   single_corr_bs,
+        #                                                   dev, temperature=temperature, compare=(1, 2))
+        #             output = network_five(network_four(features))
+        #         elif i == 3:
+        #             features = network_four(network_three(network_two(features)))
+        #             # Todo: check this with some print statements - not thought carefully about the modules in the fully connected case
+        #             id_features = features[:single_corr_bs, :]
+        #             id_features = id_features.reshape(id_features.shape[0], -1)
+        #             features = filter_bank(features)
+        #             corr_features = features[single_corr_bs:, :]
+        #             corr_features = corr_features.reshape(corr_features.shape[0], -1)
+        #             inv_loss = 1 * contrastive_layer_loss(torch.cat((id_features, corr_features), dim=0),
+        #                                                   single_corr_bs,
+        #                                                   dev, temperature=temperature, compare=(1, 2))
+        #             output = network_five(features)
+        #         else:
+        #             raise RuntimeError("Invalid filter bank index {}".format(i))
+        #
+        #         ce_loss = criterion(output, y_trn)
+        #         loss = ce_loss + inv_loss
+        #         acc = accuracy(output, y_trn)
+        #         loss.backward()
+        #         optim.step()
+        #         epoch_ce_loss += ce_loss.item()
+        #         epoch_inv_loss += inv_loss.item()
+        #         epoch_acc += acc
+        #
+        #         if j == 49:
+        #             print("###############")
+        #             print("50 minibatches training done for filter bank {}".format(i))
+        #             break
+        #     results = [epoch_ce_loss / 50,
+        #                epoch_inv_loss / 50,
+        #                epoch_acc / 50]
+        #     filter_bank_results.append(results)
+        #
+        #     print("Avg CE train loss {:6.4f}. Avg inv train loss {:6.4f}.".format(results[0], results[1]))
+        #     print("Avg train acc {:6.3f}.".format(results[2]))
+        #
+        #     # Validation
+        #     filter_bank.eval()
+        #     valid_ce_loss = 0.0
+        #     valid_inv_loss = 0.0
+        #     valid_loss = 0.0
+        #     valid_acc = 0.0
+        #     with torch.no_grad():
+        #         for j, data_tuples in enumerate(zip(*val_dls)):
+        #             for k, data_tuple in enumerate(data_tuples):
+        #                 if k == 0:
+        #                     x_val, y_val = data_tuple[0].to(dev), data_tuple[1].to(dev)
+        #                 else:
+        #                     x_temp, y_temp = data_tuple[0].to(dev), data_tuple[1].to(dev)
+        #                     x_val = torch.cat((x_val, x_temp), dim=0)
+        #                     y_val = torch.cat((y_val, y_temp), dim=0)
+        #
+        #             features = network_one(x_val)
+        #             if i == 0:
+        #                 id_features = features[:single_corr_bs, :, :, :]
+        #                 id_features = id_features.reshape(id_features.shape[0],
+        #                                                   -1)  # Flatten spatial dimensions
+        #                 features = filter_bank(features)
+        #                 corr_features = features[single_corr_bs:, :, :, :]
+        #                 corr_features = corr_features.reshape(corr_features.shape[0],
+        #                                                       -1)  # Flatten spatial dimensions
+        #                 inv_loss = 1 * contrastive_layer_loss(torch.cat((id_features, corr_features), dim=0),
+        #                                                       single_corr_bs,
+        #                                                       dev, temperature=temperature, compare=(1, 2))
+        #                 output = network_five(network_four(network_three(network_two(features))))
+        #             elif i == 1:
+        #                 features = network_two(features)
+        #                 id_features = features[:single_corr_bs, :, :, :]
+        #                 id_features = id_features.reshape(id_features.shape[0],
+        #                                                   -1)  # Flatten spatial dimensions
+        #                 features = filter_bank(features)
+        #                 corr_features = features[single_corr_bs:, :, :, :]
+        #                 corr_features = corr_features.reshape(corr_features.shape[0],
+        #                                                       -1)  # Flatten spatial dimensions
+        #                 inv_loss = 1 * contrastive_layer_loss(torch.cat((id_features, corr_features), dim=0),
+        #                                                       single_corr_bs,
+        #                                                       dev, temperature=temperature, compare=(1, 2))
+        #                 output = network_five(network_four(network_three(features)))
+        #             elif i == 2:
+        #                 features = network_three(network_two(features))
+        #                 id_features = features[:single_corr_bs, :, :, :]
+        #                 id_features = id_features.reshape(id_features.shape[0],
+        #                                                   -1)  # Flatten spatial dimensions
+        #                 features = filter_bank(features)
+        #                 corr_features = features[single_corr_bs:, :, :, :]
+        #                 corr_features = corr_features.reshape(corr_features.shape[0],
+        #                                                       -1)  # Flatten spatial dimensions
+        #                 inv_loss = 1 * contrastive_layer_loss(torch.cat((id_features, corr_features), dim=0),
+        #                                                       single_corr_bs,
+        #                                                       dev, temperature=temperature, compare=(1, 2))
+        #                 output = network_five(network_four(features))
+        #             elif i == 3:
+        #                 features = network_four(network_three(network_two(features)))
+        #                 # Todo: check this with some print statements - not thought carefully about the modules in the fully connected case
+        #                 id_features = features[:single_corr_bs, :]
+        #                 id_features = id_features.reshape(id_features.shape[0], -1)
+        #                 features = filter_bank(features)
+        #                 corr_features = features[single_corr_bs:, :]
+        #                 corr_features = corr_features.reshape(corr_features.shape[0], -1)
+        #                 inv_loss = 1 * contrastive_layer_loss(torch.cat((id_features, corr_features), dim=0),
+        #                                                       single_corr_bs,
+        #                                                       dev, temperature=temperature, compare=(1, 2))
+        #                 output = network_five(features)
+        #             else:
+        #                 raise RuntimeError("Invalid filter bank index {}".format(i))
+        #
+        #             ce_loss = criterion(output, y_val)
+        #             loss = ce_loss + inv_loss
+        #             acc = accuracy(output, y_val)
+        #             valid_ce_loss += ce_loss.item()
+        #             valid_inv_loss += inv_loss.item()
+        #             valid_loss += loss.item()
+        #             valid_acc += acc
+        #
+        #             if j == 49:
+        #                 print("50 minibatches validation done for filter bank {}".format(i))
+        #                 break
+        #             # results = [epoch_ce_loss / 20,
+        #             #            epoch_inv_loss / 20,
+        #             #            epoch_acc / 20]
+        #             # filter_bank_results.append(results)
+        #         print("Validation CE loss {:6.4f}".format(valid_ce_loss / 50))
+        #         print("Validation inv loss {:6.4f}".format(valid_inv_loss / 50))
+        #         print("Validation loss {:6.4f}".format(valid_loss / 50))
+        #         print("Validation acc {:6.3f}".format(valid_acc / 50))
+        #     # Do we add a resad as an option???
+        #
+        #     # logger.info("Epoch {}. Avg CE train loss {:6.4f}. Avg inv train loss {:6.4f}. "
+        #     #             "Avg train acc {:6.3f}.".format(*results))
+        #
+        # print(2/0)
+        """
+        End experiment with automating the level of abstraction 
+        """
+
         if corruption_name == "impulse_noise" or corruption_name == "gaussian_blur" or corruption_name == "inverse":
-            filter_bank = nn.Sequential(
-                            nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
-                            # nn.BatchNorm2d(64),
-                            nn.Dropout2d(0.3),
-                            nn.ReLU(),
-                            nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
-                            # nn.BatchNorm2d(64),
-                            nn.Dropout2d(0.3),
-                            nn.ReLU()
-                          ).to(dev)
+            filter_bank = filter_bank_one
         elif corruption_name == "rotate_fixed" or corruption_name == "scale" or corruption_name == "shear_fixed":
-            filter_bank = nn.Sequential(
-                            nn.Conv2d(128, 128, kernel_size=5, stride=1, padding=2),
-                            # nn.BatchNorm2d(128),
-                            nn.Dropout2d(0.3),
-                            nn.ReLU(),
-                            nn.Conv2d(128, 128, kernel_size=5, stride=1, padding=2),
-                            # nn.BatchNorm2d(128),
-                            nn.Dropout2d(0.3),
-                            nn.ReLU()
-                          ).to(dev)
+            filter_bank = filter_bank_three
         else:
             raise ValueError("Corruption name not recognised")
 
@@ -723,9 +1002,9 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
                     corr_features = corr_features.reshape(corr_features.shape[0], -1)  # Flatten spatial dimensions
                     inv_loss = 1 * contrastive_layer_loss(torch.cat((id_features, corr_features), dim=0), single_corr_bs,
                                                           dev, temperature=temperature, compare=(1, 2))
-                    output = network_three(network_two(features))
+                    output = network_five(network_four(network_three(network_two(features))))
                 else:
-                    features = network_two(features)
+                    features = network_three(network_two(features))
                     id_features = features[:single_corr_bs, :, :, :]
                     id_features = id_features.reshape(id_features.shape[0], -1)  # Flatten spatial dimensions
                     features = filter_bank(features)
@@ -734,7 +1013,7 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
                     inv_loss = 1 * contrastive_layer_loss(torch.cat((id_features, corr_features), dim=0),
                                                           single_corr_bs,
                                                           dev, temperature=temperature, compare=(1, 2))
-                    output = network_three(features)
+                    output = network_five(network_four(features))
 
                 ce_loss = criterion(output, y_trn)
                 loss = ce_loss + inv_loss
@@ -825,9 +1104,9 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
                         inv_loss = 1 * contrastive_layer_loss(torch.cat((id_features, corr_features), dim=0),
                                                               single_corr_bs,
                                                               dev, temperature=temperature, compare=(1, 2))
-                        output = network_three(network_two(features))
+                        output = network_five(network_four(network_three(network_two(features))))
                     else:
-                        features = network_two(features)
+                        features = network_three(network_two(features))
                         id_features = features[:single_corr_bs, :, :, :]
                         id_features = id_features.reshape(id_features.shape[0],
                                                           -1)  # Flatten spatial dimensions
@@ -838,7 +1117,7 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
                         inv_loss = 1 * contrastive_layer_loss(torch.cat((id_features, corr_features), dim=0),
                                                               single_corr_bs,
                                                               dev, temperature=temperature, compare=(1, 2))
-                        output = network_three(features)
+                        output = network_five(network_four(features))
 
                     ce_loss = criterion(output, y_val)
                     loss = ce_loss + inv_loss
@@ -934,9 +1213,9 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
                     inv_loss = 1 * contrastive_layer_loss(torch.cat((id_features, corr_features), dim=0),
                                                           single_corr_bs,
                                                           dev, temperature=temperature, compare=(1, 2))
-                    output = network_three(network_two(features))
+                    output = network_five(network_four(network_three(network_two(features))))
                 else:
-                    features = network_two(features)
+                    features = network_three(network_two(features))
                     id_features = features[:single_corr_bs, :, :, :]
                     id_features = id_features.reshape(id_features.shape[0], -1)  # Flatten spatial dimensions
                     features = filter_bank(features)
@@ -945,7 +1224,7 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
                     inv_loss = 1 * contrastive_layer_loss(torch.cat((id_features, corr_features), dim=0),
                                                           single_corr_bs,
                                                           dev, temperature=temperature, compare=(1, 2))
-                    output = network_three(features)
+                    output = network_five(network_four(features))
 
                 ce_loss = criterion(output, y_val)
                 loss = ce_loss + inv_loss
