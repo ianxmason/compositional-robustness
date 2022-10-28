@@ -307,7 +307,7 @@ if __name__ == "__main__":
 
     # PATHS
     root_dir = "/om2/user/imason/compositions/datasets/"
-    output_dir = os.path.join(root_dir, "EMNIST3/")
+    output_dir = os.path.join(root_dir, "EMNIST4/")
 
     if create_datasets:
         # LOAD EMNIST DATA
@@ -321,31 +321,13 @@ if __name__ == "__main__":
             with open(os.path.join(output_dir, "corruption_names.pkl"), "rb") as f:
                 all_corruptions = pickle.load(f)
 
+            # EMNIST4
             c_names = all_corruptions[args.corruption_ID]
-            c_name = '-'.join(c_names)
+            corrs = [getattr(dt, c)() for c in c_names]
+            c_name = '-'.join([corr.name for corr in corrs])
             corruption_names = [c_name]
             corruption_paths = [os.path.join(output_dir, c_name, dset_name)]
-            corruption_fns = [[getattr(dt, c) for c in c_names]]
-
-            # corruption_names = []
-            # corruption_fns = []
-            # corruption_paths = []
-            # for c_names in all_corruptions:
-            #     c_name = '-'.join(c_names)
-            #     c_path = os.path.join(output_dir, c_name, dset_name)
-            #     if os.path.exists(c_path):
-            #         print("Warning: {} already exists. Skipping...".format(c_path))
-            #         continue
-            #     else:
-            #         corruption_names.append(c_name)
-            #         corruption_paths.append(c_path)
-            #         corruption_fns.append([getattr(dt, c) for c in c_names])
-
-            # All corruptions begin with prescaling (padding with black) and end by cropping out the centre 28x28
-            # This avoids problems with borders of the images.
-            for c_fns in corruption_fns:
-                c_fns.insert(0, getattr(dt, "prescale_pad_black"))
-                c_fns.append(getattr(dt, "postscale_crop"))
+            corruption_fns = [corrs]
 
             # Create datasets
             _create_emnist_target_datasets(sorted_imgs, sorted_labels, corruption_fns, corruption_names,

@@ -5,51 +5,25 @@ from itertools import combinations, permutations
 
 random.seed(2778)
 root_dir = "/om2/user/imason/compositions/datasets/"
-output_dir = os.path.join(root_dir, "EMNIST3/")
+output_dir = os.path.join(root_dir, "EMNIST4/")
 
-# Which corruptions to use
-# EMNIST2
-# base_corruption_names = ['impulse_noise', 'inverse', 'gaussian_blur', 'rotate_fixed', 'scale', 'thinning']
-# EMNIST3
-base_corruption_names = ['impulse_noise', 'inverse', 'gaussian_blur', 'rotate_fixed', 'scale', 'shear_fixed']
+# Which corruptions to use - EMNIST4
+base_corruption_names = ['Contrast', 'GaussianBlur', 'ImpulseNoise', 'Inverse', 'Mirror', 'Rotate180', 'Rotate90']
 
-# All elemental corruptions
-corruption_names = [['identity']]
+# All elemental corruptions. (8 base elementals)
+corruption_names = [['Identity']]
 corruption_names += [[corruption] for corruption in base_corruption_names]
 
-# All pairs
+# All pairs. (7P2 = 42)
 corruption_names += [list(corruptions) for corruptions in permutations(base_corruption_names, 2)]
 
-# All triples - expensive but useful to see if some triples are solvable. From 6 base corrs this is 120 permutations.
-corruption_names += [list(corruptions) for corruptions in permutations(base_corruption_names, 3)]
-# Alternate - sample 4 triples
-# # hardcode the non-geometric and geometric corruptions then sample 2 more
-# triple_sample = [(base_corruption_names[0], base_corruption_names[1], base_corruption_names[2]),
-#                  (base_corruption_names[3], base_corruption_names[4], base_corruption_names[5])]
-# possible_triples = list(combinations(base_corruption_names, 3))
-# possible_triples.remove(triple_sample[0])
-# possible_triples.remove(triple_sample[1])
-# triple_sample += random.sample(possible_triples, 2)
-# # Sample 2 orders of corruptions for each triple
-# for triple in triple_sample:
-#     corruption_names += [list(corruptions) for corruptions in random.sample(list(permutations(triple)), 2)]
-
-# Sample 3 quadruples
-possible_quadruples = list(combinations(base_corruption_names, 4))
-quadruple_sample = random.sample(possible_quadruples, 3)
-# Sample 2 orders of corruptions for each quadruple
-for quadruple in quadruple_sample:
-    corruption_names += [list(corruptions) for corruptions in random.sample(list(permutations(quadruple)), 2)]
-
-# Sample 2 quintuples
-possible_quintuples = list(combinations(base_corruption_names, 5))
-quintuple_sample = random.sample(possible_quintuples, 2)
-# Sample 2 orders of corruptions for each quintuples
-for quintuple in quintuple_sample:
-    corruption_names += [list(corruptions) for corruptions in random.sample(list(permutations(quintuple)), 2)]
-
-# Sample 2 orders of the sextuple
-corruption_names += [list(corruptions) for corruptions in random.sample(list(permutations(base_corruption_names)), 2)]
+# For triples and up sample every combination and take one random order
+# (7C3 = 7C4 = 35), (7C5 = 21), (7C6 = 7), (7C7 = 1)
+for n in range(3, len(base_corruption_names) + 1):
+    all_combinations = [list(corruptions) for corruptions in combinations(base_corruption_names, n)]
+    for combination in all_combinations:
+        random.shuffle(combination)  # in place
+    corruption_names += all_combinations
 
 # Save as pickle (for easy loading). If need to view the entire list can print the pickle easily.
 with open(os.path.join(output_dir, "corruption_names.pkl"), "wb") as f:
