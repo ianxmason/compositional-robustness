@@ -8,7 +8,7 @@ root_dir = "/om2/user/imason/compositions/datasets/"
 output_dir = os.path.join(root_dir, "EMNIST4/")
 
 # Which corruptions to use - EMNIST4
-base_corruption_names = ['Contrast', 'GaussianBlur', 'ImpulseNoise', 'Inverse', 'Mirror', 'Rotate180', 'Rotate90']
+base_corruption_names = ['Contrast', 'GaussianBlur', 'ImpulseNoise', 'Invert', 'Mirror', 'Rotate180', 'Rotate90']
 
 # All elemental corruptions. (8 base elementals)
 corruption_names = [['Identity']]
