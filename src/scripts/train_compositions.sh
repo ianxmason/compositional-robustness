@@ -16,5 +16,5 @@ echo $CUDA_DEVICE_ORDER
 echo $SLURM_ARRAY_TASK_ID
 
 module load openmind/singularity/3.5.0
-singularity exec --nv -B /om,/om2/user/$USER /om/user/xboix/singularity/xboix-tensorflow2.8.0.simg python train_compositions.py --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
-#singularity exec --nv -B /om,/om2/user/$USER /om/user/xboix/singularity/xboix-tensorflow2.8.0.simg python train_compositions.py --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --vis-data --check-if-run
+singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_compositions.py --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_compositions.py --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --vis-data --check-if-run

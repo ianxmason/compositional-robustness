@@ -17,7 +17,7 @@ echo $SLURM_ARRAY_TASK_ID
 
 # Set time to 6:00:00
 module load openmind/singularity/3.5.0
-singularity exec --nv -B /om,/om2/user/$USER /om/user/xboix/singularity/xboix-tensorflow2.8.0.simg \
+singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg \
                 python train_compositions_residual_invariance.py  --experiment-name "filter-bank-invariance-10" \
                                                                   --pin-mem \
                                                                   --check-if-run \

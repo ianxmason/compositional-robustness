@@ -309,6 +309,7 @@ if __name__ == "__main__":
     root_dir = "/om2/user/imason/compositions/datasets/"
     output_dir = os.path.join(root_dir, "EMNIST4/")
 
+
     if create_datasets:
         # LOAD EMNIST DATA
         all_data = _get_emnist_datasets(root_dir)

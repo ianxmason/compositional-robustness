@@ -17,7 +17,7 @@ echo $SLURM_ARRAY_TASK_ID
 
 # Set time to 6:00:00
 module load openmind/singularity/3.5.0
-singularity exec --nv -B /om,/om2/user/$USER /om/user/xboix/singularity/xboix-tensorflow2.8.0.simg \
+singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg \
                 python train_compositions_invariance_loss.py  --experiment-name "invariance-loss" \
                                                               --weights "0,0,0,1" \
                                                               --compare-corrs ",,,123" \
@@ -27,7 +27,7 @@ singularity exec --nv -B /om,/om2/user/$USER /om/user/xboix/singularity/xboix-te
 
 # Set time to 10:00:00
 #module load openmind/singularity/3.5.0
-#singularity exec --nv -B /om,/om2/user/$USER /om/user/xboix/singularity/xboix-tensorflow2.8.0.simg \
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg \
 #                python train_compositions_invariance_loss.py  --experiment-name "L1-L2-fwd-invariance-loss" \
 #                                                              --weights "1,1,0,1" \
 #                                                              --compare-corrs "13,23,,123" \
@@ -37,7 +37,7 @@ singularity exec --nv -B /om,/om2/user/$USER /om/user/xboix/singularity/xboix-te
 
 # Set time to 10:00:00
 #module load openmind/singularity/3.5.0
-#singularity exec --nv -B /om,/om2/user/$USER /om/user/xboix/singularity/xboix-tensorflow2.8.0.simg \
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg \
 #                python train_compositions_invariance_loss.py  --experiment-name "L1-L2-bwd-invariance-loss" \
 #                                                              --weights "1,1,0,1" \
 #                                                              --compare-corrs "23,13,,123" \
@@ -47,7 +47,7 @@ singularity exec --nv -B /om,/om2/user/$USER /om/user/xboix/singularity/xboix-te
 
 # Set time to 10:00:00
 #module load openmind/singularity/3.5.0
-#singularity exec --nv -B /om,/om2/user/$USER /om/user/xboix/singularity/xboix-tensorflow2.8.0.simg \
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg \
 #                python train_compositions_invariance_loss.py  --experiment-name "L1-L2-all-invariance-loss" \
 #                                                              --weights "1,1,0,1" \
 #                                                              --compare-corrs "123,123,,123" \

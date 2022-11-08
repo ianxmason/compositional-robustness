@@ -344,6 +344,33 @@ Explained in appendix 'Choice of Corruptions'
 #     return x.astype(np.float32)
 
 
+# ---------------------------------- GENERAL -----------------------------------
+def normalize(x):
+    """
+    x: (0, 255) --> (-1, 1)
+    """
+    return x * float(2./255.) - 1.
+
+
+def denormalize(x):
+    """
+    x: (-1, 1) --> (0, 255)
+    """
+    return (x + 1.) / 2. * 255.
+
+
+def normalize_0_1(x):
+    """
+    x: (0, 1) --> (-1, 1)
+    """
+    return x * 2. - 1.
+
+
+def denormalize_0_1(x):
+    """
+    x: (-1, 1) --> (0, 1)
+    """
+    return (x + 1.) / 2.
 
 
 

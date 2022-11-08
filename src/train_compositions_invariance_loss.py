@@ -557,7 +557,7 @@ if __name__ == "__main__":
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
     parser.add_argument('--min-epochs', type=int, default=10, help="min number of training epochs")
     parser.add_argument('--max-epochs', type=int, default=50, help="max number of training epochs")
-    parser.add_argument('--batch-size', type=int, default=128, help="batch size")
+    parser.add_argument('--batch-size', type=int, default=256, help="batch size")
     parser.add_argument('--lr', type=float, default=1e-3, help="learning rate")
     parser.add_argument('--temperature', type=float, default=0.15, help="contrastive loss temperature")
     parser.add_argument('--n-workers', type=int, default=1, help="number of workers (PyTorch)")

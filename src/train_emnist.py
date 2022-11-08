@@ -6,6 +6,7 @@ import os
 import pickle
 import torch
 import torch.nn as nn
+import time
 from data.data_transforms import denormalize
 from data.data_loaders import get_multi_static_emnist_dataloaders
 from lib.networks import DTN
@@ -70,6 +71,8 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
             network.train()
             epoch_loss = 0.0
             epoch_acc = 0.0
+            # Time batches
+            start_time = time.time()
             for i, data_tuple in enumerate(trn_dl, 1):
                 x_trn, y_trn = data_tuple[0].to(dev), data_tuple[1].to(dev)
                 optim.zero_grad()
@@ -80,6 +83,11 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
                 optim.step()
                 epoch_loss += loss.item()
                 epoch_acc += acc
+
+                # Timing
+                print("Batch {} of {} in epoch {} took {:.2f} seconds.".format(i, len(trn_dl), epoch,
+                                                                               time.time() - start_time))
+                start_time = time.time()
 
                 if i % val_freq == 0:
                     # Validation

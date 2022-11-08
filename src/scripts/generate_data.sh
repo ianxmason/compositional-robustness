@@ -9,4 +9,4 @@
 # Took ~14-24 hours (not sure, stopped and restarted several times) and 4GB memory for initial long list of corruptions
 cd data/
 module load openmind/singularity/3.5.0
-singularity exec --nv -B /om,/om2/user/$USER /om/user/xboix/singularity/xboix-tensorflow2.9.simg python emnist.py --corruption-ID $SLURM_ARRAY_TASK_ID
+singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python emnist.py --corruption-ID $SLURM_ARRAY_TASK_ID

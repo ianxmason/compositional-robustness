@@ -19,7 +19,7 @@ module load openmind/singularity/3.5.0
 jobs_per_gpu=5
 for ((number=0; number<$jobs_per_gpu; number++))
 do
-  singularity exec --nv -B /om,/om2/user/$USER /om/user/xboix/singularity/xboix-tensorflow2.9.simg \
+  singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg \
               python test_compositions.py --pin-mem \
                                           --check-if-run \
                                           --num-processes $(($SLURM_ARRAY_TASK_COUNT * $jobs_per_gpu)) \
