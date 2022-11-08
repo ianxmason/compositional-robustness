@@ -9,32 +9,25 @@ import torch.nn as nn
 import time
 from data.data_transforms import denormalize
 from data.data_loaders import get_multi_static_emnist_dataloaders
-from lib.networks import DTN
+from lib.networks import SimpleConvBlock, SimpleFullyConnectedBlock, SimpleClassifier
 from lib.early_stopping import EarlyStopping
 from lib.utils import *
 
-# Todo: For if/when run more detailed/designed experiments
-    # Todo - seeding/reproducibility
-    # Todo: How am setting hparams? - Try a few shifts for quite some epochs? Use early stopping across the board once lr, etc. is set okay? Do loops over lrs?
-        # Have done no optimisation of hparams at all. The current parameters are just guessed from experience.
-    # Todo: WandB style tracking - loss curves etc.
-    # Todo: neatening - write the early stopping output to the logger, so we can see the last saved es_ckpt
 
-
-def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_classes, min_epochs, max_epochs,
+def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_classes, es_burn_in, max_epochs,
          batch_size, lr, n_workers, pin_mem, dev, vis_data, check_if_run):
-    assert max_epochs > min_epochs
+    assert max_epochs > es_burn_in
     # Train all models
     for corruption_names in corruptions:
-        ckpt_name = "{}-{}.pt".format('-'.join(corruption_names), lr)
+        ckpt_name = "ConvBlock1_{}.pt".format('-'.join(corruption_names))
         # Check if training has already completed for the corruption(s) in question.
         if check_if_run and os.path.exists(os.path.join(ckpt_path, ckpt_name)):
-            print("Checkpoint already exists at {}. \n Skipping training on corruption(s): {}".format(
+            print("Checkpoint already exists at {} \nSkipping training on corruption(s): {}".format(
                 os.path.join(ckpt_path, ckpt_name), corruption_names))
             continue
 
         # Log File set up
-        log_name = "{}-{}.log".format('-'.join(corruption_names), lr)
+        log_name = "{}.log".format('-'.join(corruption_names))
         logger = custom_logger(os.path.join(logging_path, log_name), stdout=False)  # stdout True to see also in console
         print("Logging file created to train on corruption(s): {}".format(corruption_names))
         # Data Set Up
@@ -46,7 +39,7 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
 
         if vis_data:
             x, y = next(iter(trn_dl))
-            fig_name = "{}-{}.png".format('-'.join(corruption_names), lr)
+            fig_name = "{}.png".format('-'.join(corruption_names))
             fig_path = os.path.join(vis_path, fig_name)
             # Denormalise Images
             x = x.detach().cpu().numpy()
@@ -56,27 +49,85 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
             visualise_data(x[:36], y[:36], save_path=fig_path, title=fig_name[:-4], n_rows=6, n_cols=6)
 
         # Network & Optimizer Set Up
-        network = DTN(total_n_classes).to(dev)
-        optim = torch.optim.Adam(network.parameters(), lr)
-        criterion = nn.CrossEntropyLoss()
-        es_ckpt_path = os.path.join(ckpt_path, "es_ckpt_{}-{}.pt".format('-'.join(corruption_names), lr))
-        early_stopping = EarlyStopping(patience=25, verbose=True, path=es_ckpt_path)
+        network_blocks = []
+        network_block_ckpt_names = []
 
-        # Train Loop
+        network_blocks.append(
+            nn.Sequential(
+                SimpleConvBlock(3, 64, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.1)  # 0.1
+            ).to(dev)
+        )
+        network_block_ckpt_names.append("ConvBlock1_{}.pt".format('-'.join(corruption_names)))
+
+        network_blocks.append(
+            nn.Sequential(
+                SimpleConvBlock(64, 128, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.3)  # 0.3
+            ).to(dev)
+        )
+        network_block_ckpt_names.append("ConvBlock2_{}.pt".format('-'.join(corruption_names)))
+
+        network_blocks.append(
+            nn.Sequential(
+                SimpleConvBlock(128, 256, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.5)  # 0.5
+            ).to(dev)
+        )
+        network_block_ckpt_names.append("ConvBlock3_{}.pt".format('-'.join(corruption_names)))
+
+        network_blocks.append(
+            nn.Sequential(
+                nn.Flatten(),  # Flattens everything except the batch dimension by default
+                SimpleFullyConnectedBlock(256 * 4 * 4, 512, batch_norm=False, dropout=0.5)
+            ).to(dev)
+        )
+        network_block_ckpt_names.append("FullyConnected_{}.pt".format('-'.join(corruption_names)))
+
+        network_blocks.append(
+            nn.Sequential(
+                SimpleClassifier(512, total_n_classes)
+            ).to(dev)
+        )
+        network_block_ckpt_names.append("Classifier_{}.pt".format('-'.join(corruption_names)))
+
+        assert len(network_block_ckpt_names) == len(network_blocks)
+        assert len(network_blocks) >= 2  # assumed when the network is called
+        all_parameters = []
+        for block in network_blocks:
+            all_parameters += list(block.parameters())
+        optim = torch.optim.Adam(all_parameters, lr)
+        criterion = nn.CrossEntropyLoss()
+        es_ckpt_paths = [os.path.join(ckpt_path, "es_ckpt_{}.pt".format(block_ckpt_name)) for block_ckpt_name in
+                         network_block_ckpt_names]
+        early_stoppings = [EarlyStopping(patience=25, verbose=True, path=es_ckpt_path, trace_func=logger.info) for
+                           es_ckpt_path in es_ckpt_paths]
+        assert len(early_stoppings) == len(network_blocks)
+
+
+        # We want to check for early stopping after approximately equal number of batches
+        # With more corruptions, trn_dl is larger, so the number of batches per epoch is higher
         val_freq = len(trn_dl) // len(corruption_names)
-        val_freq = 1
+        val_count = 0
         logger.info("Validation frequency: every {} batches".format(val_freq))
+        # Train Loop
         for epoch in range(max_epochs):
             # Training
-            network.train()
+            for block in network_blocks:
+                block.train()
             epoch_loss = 0.0
             epoch_acc = 0.0
-            # Time batches
-            start_time = time.time()
+
+            # # Time batches
+            # start_time = time.time()
+
             for i, data_tuple in enumerate(trn_dl, 1):
                 x_trn, y_trn = data_tuple[0].to(dev), data_tuple[1].to(dev)
                 optim.zero_grad()
-                output = network(x_trn)
+                for j, block in enumerate(network_blocks):
+                    if j == 0:
+                        features = block(x_trn)
+                    elif j == len(network_blocks) - 1:
+                        output = block(features)
+                    else:
+                        features = block(features)
                 loss = criterion(output, y_trn)
                 acc = accuracy(output, y_trn)
                 loss.backward()
@@ -84,20 +135,27 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
                 epoch_loss += loss.item()
                 epoch_acc += acc
 
-                # Timing
-                print("Batch {} of {} in epoch {} took {:.2f} seconds.".format(i, len(trn_dl), epoch,
-                                                                               time.time() - start_time))
-                start_time = time.time()
+                # # Time batches
+                # print("Batch {} of {} in epoch {} took {:.2f} seconds.".format(i, len(trn_dl), epoch,
+                #                                                                time.time() - start_time))
+                # start_time = time.time()
 
                 if i % val_freq == 0:
                     # Validation
-                    network.eval()
+                    for block in network_blocks:
+                        block.eval()
                     valid_loss = 0.0
                     valid_acc = 0.0
                     with torch.no_grad():
                         for data_tuple in val_dl:
                             x_val, y_val = data_tuple[0].to(dev), data_tuple[1].to(dev)
-                            output = network(x_val)
+                            for j, block in enumerate(network_blocks):
+                                if j == 0:
+                                    features = block(x_val)
+                                elif j == len(network_blocks) - 1:
+                                    output = block(features)
+                                else:
+                                    features = block(features)
                             loss = criterion(output, y_val)
                             acc = accuracy(output, y_val)
                             valid_loss += loss.item()
@@ -105,39 +163,51 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
                     logger.info("Validation loss {:6.4f}".format(valid_loss / len(val_dl)))
                     logger.info("Validation accuracy {:6.3f}".format(valid_acc / len(val_dl)))
                     # Early Stopping
-                    if epoch > min_epochs:
-                        early_stopping(valid_loss / len(val_dl), network)  # ES on loss
-                        # early_stopping(100. - (valid_acc / len(val_dl)), network)  # ES on acc
-                        if early_stopping.early_stop:
+                    val_count += 1
+                    if val_count >= es_burn_in:
+                        for es, block in zip(early_stoppings, network_blocks):
+                            es(valid_loss / len(val_dl), block)  # ES on loss
+                            # es(100. - (valid_acc / len(val_dl)), block)  # ES on acc
+                        if early_stoppings[0].early_stop:
                             logger.info("Early stopping")
                             break
-                    network.train()
+                    for block in network_blocks:
+                        block.train()
 
-            if early_stopping.early_stop:
+            if early_stoppings[0].early_stop:
                 break
             results = [epoch, epoch_loss / len(trn_dl), epoch_acc / len(trn_dl)]
             logger.info("Epoch {}. Avg train loss {:6.4f}. Avg train acc {:6.3f}.".format(*results))
 
         # Save model
-        logger.info("Loading early stopped checkpoint")
-        early_stopping.load_from_checkpoint(network)
-        network.eval()
+        logger.info("Loading early stopped checkpoints")
+        for es, block in zip(early_stoppings, network_blocks):
+            es.load_from_checkpoint(block)
+        for block in network_blocks:
+            block.eval()
         valid_loss = 0.0
         valid_acc = 0.0
         with torch.no_grad():
             for data_tuple in val_dl:
                 x_val, y_val = data_tuple[0].to(dev), data_tuple[1].to(dev)
-                output = network(x_val)
+                for j, block in enumerate(network_blocks):
+                    if j == 0:
+                        features = block(x_val)
+                    elif j == len(network_blocks) - 1:
+                        output = block(features)
+                    else:
+                        features = block(features)
                 loss = criterion(output, y_val)
                 acc = accuracy(output, y_val)
                 valid_loss += loss.item()
                 valid_acc += acc
         logger.info("Early Stopped validation loss {:6.4f}".format(valid_loss / len(val_dl)))
         logger.info("Early Stopped validation accuracy {:6.3f}".format(valid_acc / len(val_dl)))
-        early_stopping.delete_checkpoint()  # Removes from disk
-
-        torch.save(network.state_dict(), os.path.join(ckpt_path, ckpt_name))
-        logger.info("Saved best model to {}".format(os.path.join(ckpt_path, ckpt_name)))
+        for es in early_stoppings:
+            es.delete_checkpoint()  # Removes from disk
+        for block_ckpt_name, block in zip(network_block_ckpt_names, network_blocks):
+            torch.save(block.state_dict(), os.path.join(ckpt_path, block_ckpt_name))
+            logger.info("Saved best network block to {}".format(os.path.join(ckpt_path, block_ckpt_name)))
 
 
 if __name__ == "__main__":
@@ -151,7 +221,7 @@ if __name__ == "__main__":
     parser.add_argument('--vis-path', type=str, default='/om2/user/imason/compositions/figs/EMNIST4/visualisations/',
                         help="path to directory to save data visualisations")
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
-    parser.add_argument('--min-epochs', type=int, default=10, help="min number of training epochs")
+    parser.add_argument('--es-burn-in', type=int, default=10, help="min number of validation steps before early stopping")
     parser.add_argument('--max-epochs', type=int, default=50, help="max number of training epochs")
     parser.add_argument('--batch-size', type=int, default=256, help="batch size")
     parser.add_argument('--lr', type=float, default=1e-3, help="learning rate")
@@ -211,7 +281,7 @@ if __name__ == "__main__":
     # args.lr = lrs[exp_idx]
 
     main(corruptions, args.data_root, args.ckpt_path, args.logging_path, args.vis_path, args.total_n_classes,
-         args.min_epochs, args.max_epochs, args.batch_size, args.lr, args.n_workers, args.pin_mem, dev, args.vis_data,
+         args.es_burn_in, args.max_epochs, args.batch_size, args.lr, args.n_workers, args.pin_mem, dev, args.vis_data,
          args.check_if_run)
 
 

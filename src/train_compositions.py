@@ -156,9 +156,6 @@ if __name__ == "__main__":
     parser.add_argument('--corruption-ID', type=int, default=0, help="which corruption to generate")
     args = parser.parse_args()
 
-    # Set seeding
-    reset_rngs(seed=13579, deterministic=True)
-
     # Set device
     if args.cpu:
         dev = torch.device('cpu')
