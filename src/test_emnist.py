@@ -38,10 +38,18 @@ def create_and_load_network_blocks(ckpt_path, ckpt_name, total_n_classes, dev):
     )
     network_block_ckpt_names.append("ConvBlock3_{}".format(ckpt_name))
 
+    # Extra block for more capacity. If used changed next block from 256 * 4 * 4 to 256 * 2 * 2.
+    network_blocks.append(
+        nn.Sequential(
+            SimpleConvBlock(256, 256, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.5)  # 0.5
+        ).to(dev)
+    )
+    network_block_ckpt_names.append("ConvBlock4_{}".format(ckpt_name))
+
     network_blocks.append(
         nn.Sequential(
             nn.Flatten(),  # Flattens everything except the batch dimension by default
-            SimpleFullyConnectedBlock(256 * 4 * 4, 512, batch_norm=False, dropout=0.5)
+            SimpleFullyConnectedBlock(256 * 2 * 2, 512, batch_norm=False, dropout=0.5)
         ).to(dev)
     )
     network_block_ckpt_names.append("FullyConnected_{}".format(ckpt_name))
