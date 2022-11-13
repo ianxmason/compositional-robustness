@@ -222,9 +222,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Args to train networks on different corruptions.')
     parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST4/',
                         help="path to directory containing directories of different corruptions")
-    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST4-4convs/',
+    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST4/',
                         help="path to directory to save checkpoints")
-    parser.add_argument('--logging-path', type=str, default='/om2/user/imason/compositions/logs/EMNIST4-4convs/',
+    parser.add_argument('--logging-path', type=str, default='/om2/user/imason/compositions/logs/EMNIST4/',
                         help="path to directory to save logs")
     parser.add_argument('--vis-path', type=str, default='/om2/user/imason/compositions/figs/EMNIST4/visualisations/',
                         help="path to directory to save data visualisations")
@@ -282,9 +282,9 @@ if __name__ == "__main__":
     corruptions = corruptions[args.corruption_ID:args.corruption_ID+1]
 
     """
-   If running on polestar
-   CUDA_VISIBLE_DEVICES=4 python train_emnist.py --pin-mem --check-if-run --corruption-ID 0
-   """
+    If running on polestar
+    CUDA_VISIBLE_DEVICES=4 python train_emnist.py --pin-mem --check-if-run --corruption-ID 0
+    """
 
     # Searching learning rates. Change --array=0-47 to --array=0-191
     # assert len(corruptions) == 48  # for EMNIST3

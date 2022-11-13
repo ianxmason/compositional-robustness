@@ -78,7 +78,7 @@ class Identity(Corruption):
 
 
 class GaussianBlur(Corruption):
-    def __init__(self, severity=3):
+    def __init__(self, severity=2):
         if severity not in [1, 2, 3, 4, 5]:
             raise ValueError("Severity must be between 1 and 5.")
         self.severity = severity
@@ -243,7 +243,7 @@ class Mirror(Corruption):
 
 
 class Contrast(Corruption):
-    def __init__(self, severity=3):
+    def __init__(self, severity=2):
         if severity not in [1, 2, 3, 4, 5]:
             raise ValueError("Severity must be between 1 and 5.")
         self.severity = severity
@@ -268,6 +268,30 @@ class Contrast(Corruption):
         return x.astype(np.float32)
 
 
+class Swirl(Corruption):
+    def __init__(self, severity=3):
+        if severity not in [1, 2, 3, 4, 5]:
+            raise ValueError("Severity must be between 1 and 5.")
+        self.severity = severity
+
+    @property
+    def name(self):
+        return 'Swirl'
+
+    @property
+    def abbreviation(self):
+        return 'SW'
+
+    @property
+    def lossless(self):
+        return False  # Not certain
+
+    def __call__(self, x):
+        c = [0.5, 1, 3, 5, 10][self.severity - 1]
+        x = np.array(x) / 255.
+        x = transform.swirl(x, rotation=0, strength=c, radius=math.sqrt(2) * x.shape[0] / 2)
+        x = np.clip(x, 0, 1) * 255
+        return x.astype(np.float32)
 
 """
 Currently we no longer use scale or shear as they introduce too many problems

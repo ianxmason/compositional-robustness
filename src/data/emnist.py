@@ -307,7 +307,7 @@ if __name__ == "__main__":
 
     # PATHS
     root_dir = "/om2/user/imason/compositions/datasets/"
-    output_dir = os.path.join(root_dir, "EMNIST4/")
+    output_dir = os.path.join(root_dir, "EMNIST5/")
 
 
     if create_datasets:
@@ -322,7 +322,7 @@ if __name__ == "__main__":
             with open(os.path.join(output_dir, "corruption_names.pkl"), "rb") as f:
                 all_corruptions = pickle.load(f)
 
-            # EMNIST4
+            # EMNIST4 or EMNIST5
             c_names = all_corruptions[args.corruption_ID]
             corrs = [getattr(dt, c)() for c in c_names]
             c_name = '-'.join([corr.name for corr in corrs])
