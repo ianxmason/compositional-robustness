@@ -101,9 +101,9 @@ def test_specific(data_root, ckpt_path, save_path, total_n_classes, batch_size, 
     Parallelise by testing different checkpoints in different processes
     """
     files = os.listdir(ckpt_path)
-    files = list(set(['_'.join(f.split('_')[1:]) for f in files]))  # removes duplicated corruptions
+    files = list(set(['_'.join(f.split('_')[1:]) for f in files]))  # removes duplicated corruptions (because of blocks)
     files.sort()
-    assert len(files) == 128  # hardcoded for EMNIST
+    assert len(files) == 64  # hardcoded for EMNIST. 128 EMNIST4. 64 EMNIST5.
     assert total_processes <= len(files)
     assert process < total_processes
 
@@ -172,7 +172,7 @@ def test_all(data_root, ckpt_path, save_path, total_n_classes, batch_size, n_wor
     ckpt = files[-1]
     if "es_" == ckpt[:3]:
         raise ValueError("Early stopping ckpt found {}. Training hasn't finished yet".format(ckpt))
-    assert len(ckpt.split('-')) == 8  # hardcoded for EMNIST
+    assert len(ckpt.split('-')) == 7  # hardcoded for EMNIST. 8 EMNIST4. 7 EMNIST5.
     ckpt = ckpt.split('_')[1]  # remove the block name at the start
 
     # Load the ckpt
@@ -191,7 +191,7 @@ def test_all(data_root, ckpt_path, save_path, total_n_classes, batch_size, n_wor
     corruptions = os.listdir(data_root)
     corruptions = [c for c in corruptions if c != "raw" and c != "corruption_names.pkl"]
     corruptions.sort()
-    assert len(corruptions) == 149  # hardcoded for EMNIST
+    assert len(corruptions) == 167  # hardcoded for EMNIST. 149 EMNIST4. 167 EMNIST5.
     assert total_processes <= len(corruptions)
     assert process < total_processes
 
@@ -226,11 +226,11 @@ def test_all(data_root, ckpt_path, save_path, total_n_classes, batch_size, n_wor
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Args to test networks on all corruptions in a given directory.')
-    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST4/',
+    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST5/',
                         help="path to directory containing directories of different corruptions")
-    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST4/',
+    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST5/',
                         help="path to directory to save checkpoints")
-    parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/results/EMNIST4/',
+    parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/results/EMNIST5/',
                         help="path to directory to save test accuracies and losses")
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
     parser.add_argument('--batch-size', type=int, default=256, help="batch size")

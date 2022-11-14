@@ -220,13 +220,13 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, total_n_clas
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Args to train networks on different corruptions.')
-    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST4/',
+    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST5/',
                         help="path to directory containing directories of different corruptions")
-    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST4/',
+    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST5/',
                         help="path to directory to save checkpoints")
-    parser.add_argument('--logging-path', type=str, default='/om2/user/imason/compositions/logs/EMNIST4/',
+    parser.add_argument('--logging-path', type=str, default='/om2/user/imason/compositions/logs/EMNIST5/',
                         help="path to directory to save logs")
-    parser.add_argument('--vis-path', type=str, default='/om2/user/imason/compositions/figs/EMNIST4/visualisations/',
+    parser.add_argument('--vis-path', type=str, default='/om2/user/imason/compositions/figs/EMNIST5/visualisations/',
                         help="path to directory to save data visualisations")
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
     parser.add_argument('--es-burn-in', type=int, default=10, help="min number of validation steps before early stopping")
@@ -276,7 +276,7 @@ if __name__ == "__main__":
         else:
             raise ValueError("Only expect the identity to appear as its own corruption")
 
-    assert len(corruptions) == 128  # for EMNIST4
+    assert len(corruptions) == 64  # 64 for EMNIST 5, 128 for EMNIST4
 
     # Using slurm to parallelise the training
     corruptions = corruptions[args.corruption_ID:args.corruption_ID+1]

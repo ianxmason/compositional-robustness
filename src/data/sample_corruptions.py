@@ -23,7 +23,7 @@ corruption_names += [list(corruptions) for corruptions in permutations(base_corr
 # For triples and up sample every combination and take one random order
 # (6C3 = 20) -> sample 2 orders per combination
 # (6C4 = 15) -> sample 2 orders per combination
-# (6C5 = 5) -> sample 6 orders per combination
+# (6C5 = 6) -> sample 5 orders per combination
 # (6C6 = 1) -> sample 30 orders per combination
 for n in range(3, len(base_corruption_names) + 1):
     all_combinations = [list(corruptions) for corruptions in combinations(base_corruption_names, n)]

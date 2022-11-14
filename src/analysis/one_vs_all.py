@@ -72,7 +72,7 @@ def main(elemental_corruptions, results_path, save_path):
                 else:
                     raise RuntimeError("Invalid file {} in {}".format(results_file, results_path))
 
-    assert len(specific_accs) == 149  # hardcoded for EMNIST4
+    assert len(specific_accs) == 167  # hardcoded for EMNIST. EMNIST4 149. EMNIST5 167.
     assert len(all_accs) == len(specific_accs) == len(all_losses) == len(specific_losses)
 
     all_losses_df = pd.DataFrame(data=all_losses, index=["all"])
@@ -123,7 +123,7 @@ def main(elemental_corruptions, results_path, save_path):
 
     # Get counts of how many points are in each box
     comp_counts = {}
-    for i in range(1, 8):
+    for i in range(1, 7):
         comp_counts[i] = []
         for exp in ["specific", "all"]:
             comp_counts[i].append(
@@ -182,11 +182,11 @@ def main(elemental_corruptions, results_path, save_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Args to test networks on all corruptions in a given directory.')
-    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST4/',
+    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST5/',
                         help="path to directory containing directories of different corruptions")
-    parser.add_argument('--results-path', type=str, default='/om2/user/imason/compositions/results/EMNIST4/',
+    parser.add_argument('--results-path', type=str, default='/om2/user/imason/compositions/results/EMNIST5/',
                         help="path to directory containing results of testing")
-    parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/analysis/EMNIST4/',
+    parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/analysis/EMNIST5/',
                         help="path to directory to save analysis plots and pickle files")
     args = parser.parse_args()
 

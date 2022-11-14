@@ -8,8 +8,8 @@ import shutil
 sys.path.append("../")
 from lib.utils import mkdir_p
 
-data_dir = '/om2/user/imason/compositions/datasets/EMNIST4/'
-save_dir = '/om2/user/imason/compositions/check_data/EMNIST4'
+data_dir = '/om2/user/imason/compositions/datasets/EMNIST5/'
+save_dir = '/om2/user/imason/compositions/check_data/EMNIST5'
 mkdir_p(save_dir)
 
 for corruptions in os.listdir(data_dir):
