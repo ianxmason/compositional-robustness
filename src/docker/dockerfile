@@ -1,0 +1,49 @@
+FROM pytorch/pytorch:1.12.0-cuda11.3-cudnn8-devel
+
+WORKDIR /opt/nobrainer
+
+COPY . .
+
+RUN apt-get update -qq \
+    && apt-get install -yq --no-install-recommends imagemagick \
+    && apt-get install -y nodejs \
+    && apt-get install -y npm
+
+RUN apt-get clean
+
+RUN pip3 install --upgrade pip
+
+RUN pip3 install --no-cache-dir \
+        scikit-image \
+        scikit-learn \
+        scipy \
+        ipython \
+        pandas \
+        packaging \
+        imageio \
+        pyyaml \
+        seaborn \
+        opencv-python \
+        tqdm \
+        pillow \
+        wandb \
+        tabulate \
+        gdown
+
+RUN apt-get install -yq locales \
+    && export LC_ALL="en_US.UTF-8" \
+    && export LC_CTYPE="en_US.UTF-8"
+
+RUN dpkg-reconfigure locales
+
+RUN apt update && apt install -y libsm6 libxext6 libxrender-dev \
+    && rm -rf ~/.cache/pip/* \
+    && useradd --no-user-group --create-home --shell /bin/bash neuro
+
+ENV PATH="$PATH:/opt/nobrainer/bin"
+
+USER neuro
+
+WORKDIR /home/neuro
+
+LABEL maintainer="Ian Mason <imason@mit.edu>"

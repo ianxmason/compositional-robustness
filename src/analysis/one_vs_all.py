@@ -17,19 +17,23 @@ import data.data_transforms as dt
 from analysis.plotting import *
 
 
-def main(elemental_corruptions, results_path, save_path):
+def main(elemental_corruptions, experiment, results_path, save_path):
 
     elemental_corruptions = [getattr(dt, c)() for c in elemental_corruptions]
     all_losses = {}
     all_accs = {}
     specific_losses = {}
     specific_accs = {}
-    for results_file in sorted(os.listdir(os.path.join(results_path)), key=lambda x: (x.count('-'), x.lower())):
+
+    results_files = os.listdir(os.path.join(results_path))
+    results_files = [f for f in results_files if f.split("_")[0] == experiment]
+
+    for results_file in sorted(results_files, key=lambda x: (x.count('-'), x.lower())):
         if "process" in results_file:
             with open(os.path.join(results_path, results_file), "rb") as f:
                 results = pickle.load(f)
                 if "_losses" in results_file:
-                    name = results_file.split("_")[0]
+                    name = results_file.split("_")[1]
                     for k, v in results.items():
                         for corruption in elemental_corruptions:
                             k = k.replace(corruption.name, corruption.abbreviation)
@@ -38,7 +42,7 @@ def main(elemental_corruptions, results_path, save_path):
                         else:
                             all_losses[k] = v
                 elif "_accs" in results_file:
-                    name = results_file.split("_")[0]
+                    name = results_file.split("_")[1]
                     for k, v in results.items():
                         for corruption in elemental_corruptions:
                             k = k.replace(corruption.name, corruption.abbreviation)
@@ -52,7 +56,7 @@ def main(elemental_corruptions, results_path, save_path):
             with open(os.path.join(results_path, results_file), "rb") as f:
                 results = pickle.load(f)
                 if "_losses" in results_file:
-                    name = results_file.split("_")[0]
+                    name = results_file.split("_")[1]
                     for k, v in results.items():
                         for corruption in elemental_corruptions:
                             k = k.replace(corruption.name, corruption.abbreviation)
@@ -61,7 +65,7 @@ def main(elemental_corruptions, results_path, save_path):
                         else:
                             specific_losses[k] = v
                 elif "_accs" in results_file:
-                    name = results_file.split("_")[0]
+                    name = results_file.split("_")[1]
                     for k, v in results.items():
                         for corruption in elemental_corruptions:
                             k = k.replace(corruption.name, corruption.abbreviation)
@@ -102,8 +106,8 @@ def main(elemental_corruptions, results_path, save_path):
     axs[1].set_xlabel("Training Corruption(s) - Single Shifts")
     axs[1].set_ylabel("Test Corruption(s) - Compositions")
 
-    plt.savefig(os.path.join(save_path, "one-vs-all-heatmap.pdf"), bbox_inches="tight")
-    print("Saved heatmap to {}".format(os.path.join(save_path, "one-vs-all-heatmap.pdf")))
+    plt.savefig(os.path.join(save_path, "{}_one-vs-all-heatmap.pdf".format(experiment)), bbox_inches="tight")
+    print("Saved heatmap to {}".format(os.path.join(save_path, "{}_one-vs-all-heatmap.pdf".format(experiment))))
 
 
     # Boxplot
@@ -146,8 +150,30 @@ def main(elemental_corruptions, results_path, save_path):
         # axs.text(i - 1 + 0.0, 95, counts[1], c='orange', horizontalalignment='center')
         # axs.text(i - 1 + 0.3, 95, counts[2], c='g', horizontalalignment='center')
 
-    plt.savefig(os.path.join(save_path, "one-vs-all-boxplot.pdf"), bbox_inches="tight")
-    print("Saved boxplot to {}".format(os.path.join(save_path, "one-vs-all-boxplot.pdf")))
+    plt.savefig(os.path.join(save_path, "{}_one-vs-all-boxplot.pdf".format(experiment)), bbox_inches="tight")
+    print("Saved boxplot to {}".format(os.path.join(save_path, "{}_one-vs-all-boxplot.pdf".format(experiment))))
+
+
+    # Violinplot
+    fig, axs = plt.subplots(1, 1, figsize=(8, 8))
+    sns.violinplot(x="Num Elementals", y="Composition Accuracy", hue="Experiment", data=plot_df, ax=axs)
+    axs.set_title("Composition accuracy with seen elementals")
+    axs.set_ylim(0, 100)
+    axs.legend(loc='center right')
+    plt.xticks(rotation=90)
+    # Add a count for how many points are in each box
+    for i, counts in comp_counts.items():
+        # 2 experiments
+        axs.text(i - 1 - 0.2, 95, counts[0], c='b', horizontalalignment='center')
+        axs.text(i - 1 + 0.2, 95, counts[1], c='orange', horizontalalignment='center')
+
+        # 3 experiments
+        # axs.text(i - 1 - 0.3, 95, counts[0], c='b', horizontalalignment='center')
+        # axs.text(i - 1 + 0.0, 95, counts[1], c='orange', horizontalalignment='center')
+        # axs.text(i - 1 + 0.3, 95, counts[2], c='g', horizontalalignment='center')
+
+    plt.savefig(os.path.join(save_path, "{}_one-vs-all-violins.pdf".format(experiment)), bbox_inches="tight")
+    print("Saved violinplot to {}".format(os.path.join(save_path, "{}_one-vs-all-violins.pdf".format(experiment))))
 
 
     # Difference-histogram
@@ -176,8 +202,8 @@ def main(elemental_corruptions, results_path, save_path):
     axs[1].set_xlabel("Change in accuracy")
     axs[1].set_ylabel("Count")
 
-    plt.savefig(os.path.join(save_path, "one-vs-all-histogram.pdf"), bbox_inches="tight")
-    print("Saved histogram to {}".format(os.path.join(save_path, "one-vs-all-histogram.pdf")))
+    plt.savefig(os.path.join(save_path, "{}_one-vs-all-histogram.pdf".format(experiment)), bbox_inches="tight")
+    print("Saved histogram to {}".format(os.path.join(save_path, "{}_one-vs-all-histogram.pdf".format(experiment))))
 
 
 if __name__ == "__main__":
@@ -188,6 +214,8 @@ if __name__ == "__main__":
                         help="path to directory containing results of testing")
     parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/analysis/EMNIST5/',
                         help="path to directory to save analysis plots and pickle files")
+    parser.add_argument('--experiment', type=str, default='CrossEntropy',
+                        help="which method to use. CrossEntropy or Contrastive or Modules.")
     args = parser.parse_args()
 
     # Set seeding
@@ -211,4 +239,4 @@ if __name__ == "__main__":
     If use shell script put cd analysis in shell script
     """
 
-    main(elemental_corruptions, args.results_path, args.save_path)
+    main(elemental_corruptions, args.experiment, args.results_path, args.save_path)

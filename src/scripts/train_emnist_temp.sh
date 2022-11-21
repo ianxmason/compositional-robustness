@@ -16,7 +16,5 @@ echo $CUDA_DEVICE_ORDER
 echo $SLURM_ARRAY_TASK_ID
 
 module load openmind/singularity/3.5.0
-# Cross entropy loss -t 12:00:00
-singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
-# Contrastive loss -t 14:00:00
-#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "Contrastive" --weights "0,0,0,1,0" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
+# This is temorary for leaving crossentropy and contrastive in the background over a couple of days and ensuring no downtime
+singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "Contrastive" --weights "0,0,0,1,0" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
