@@ -308,3 +308,88 @@ def create_emnist_network(total_n_classes, experiment, corruption_names, dev):
 
     assert len(network_block_ckpt_names) == len(network_blocks)
     return network_blocks, network_block_ckpt_names
+
+
+def create_emnist_modules(experiment, corruption_names, dev):
+    modules = []
+    module_ckpt_names = []
+
+    modules.append(
+        nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=5, stride=2, padding=2),
+            nn.Dropout2d(0.1),
+            nn.Conv2d(64, 64, kernel_size=5, stride=2, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 64, kernel_size=5, stride=2, padding=2, output_padding=1),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 3, kernel_size=5, stride=2, padding=2, output_padding=1),
+            nn.Dropout2d(0.1),
+            nn.Tanh()  # normalized data is in range [-1, 1]
+        ).to(dev)
+    )
+    module_ckpt_names.append("{}_ConvModule0_{}.pt".format(experiment, '-'.join(corruption_names)))  # In image space
+
+    modules.append(
+        nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU()
+        ).to(dev)
+    )
+    module_ckpt_names.append("{}_ConvModule1_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(
+        nn.Sequential(
+            nn.Conv2d(128, 128, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.Conv2d(128, 128, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU()
+        ).to(dev)
+    )
+    module_ckpt_names.append("{}_ConvModule2_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(
+        nn.Sequential(
+            nn.Conv2d(256, 256, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.5),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.5),
+            nn.ReLU()
+        ).to(dev)
+    )
+    module_ckpt_names.append("{}_ConvModule3_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(
+        nn.Sequential(
+            nn.Conv2d(256, 256, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.5),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.5),
+            nn.ReLU()
+        ).to(dev)
+    )
+    module_ckpt_names.append("{}_ConvModule4_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(
+        nn.Sequential(
+            nn.Linear(512, 512),
+            nn.Dropout(0.5),
+            nn.ReLU(),
+            nn.Linear(512, 512),
+            nn.Dropout(0.5),
+            nn.ReLU()
+        ).to(dev)
+    )
+    module_ckpt_names.append("{}_FullyConnectedModule5_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    assert len(module_ckpt_names) == len(modules)
+    return modules, module_ckpt_names

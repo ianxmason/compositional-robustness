@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import pickle
 from data.data_loaders import get_static_emnist_dataloaders
-from lib.networks import create_emnist_network
+from lib.networks import create_emnist_network, create_emnist_modules
 from lib.utils import *
 from lib.equivariant_hooks import *
 
@@ -30,6 +30,41 @@ def loss_and_accuracy(network_blocks, dataloader, dev):
                     output = block(features)
                 else:
                     features = block(features)
+            loss = criterion(output, y_tst)
+            acc = accuracy(output, y_tst)
+            test_loss += loss.item()
+            test_acc += acc
+
+    return test_loss / len(dataloader), test_acc / len(dataloader)
+
+
+def modules_loss_and_accuracy(network_blocks, test_modules, test_module_levels, dataloader, dev):
+    assert len(network_blocks) >= 2  # assumed when the network is called
+    criterion = nn.CrossEntropyLoss()
+    for block in network_blocks:
+        block.eval()
+    for mod in test_modules:
+        mod.eval()
+
+    # Modules are applied as follows:
+    # 1. the earlier the level the earlier the module is used
+    # 2. the earlier the corruption is in the test corruption name the earlier it is applied
+    test_loss = 0.0
+    test_acc = 0.0
+    with torch.no_grad():
+        for data_tuple in dataloader:
+            x_tst, y_tst = data_tuple[0].to(dev), data_tuple[1].to(dev)
+            for j, block in enumerate(network_blocks):
+                if j == 0:
+                    features = block(x_tst)
+                elif j == len(network_blocks) - 1:
+                    output = block(features)
+                else:
+                    features = block(features)
+                if j in test_module_levels:
+                    for m, l in zip(test_modules, test_module_levels):
+                        if l == j:
+                            features = m(features)
             loss = criterion(output, y_tst)
             acc = accuracy(output, y_tst)
             test_loss += loss.item()
@@ -177,6 +212,96 @@ def test_all(experiment, data_root, ckpt_path, save_path, total_n_classes, batch
         pickle.dump(corruption_losses, f)
 
 
+def test_modules(experiment, data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers, pin_mem, dev,
+                 check_if_run, total_processes, process):
+    """
+    Get the specific checkpoint trained on all corruptions and test on every composition
+
+    Parallelise by testing different compositions in different processes
+    """
+    files = os.listdir(ckpt_path)
+    for f in files:
+        if "es_" == f[:3]:
+            raise ValueError("Early stopping ckpt found {}. Training hasn't finished yet".format(f))
+    files = [f for f in files if f.split('_')[0] == experiment]
+    module_ckpts = [f for f in files if len(f.split('-')) == 2]
+    assert len(module_ckpts) == 6  # hardcoded for EMNIST5.
+    # Load the ckpt
+    if check_if_run and os.path.exists(os.path.join(save_path, "{}_all_losses_process_{}_of_{}.pkl".format(
+                                                    experiment, process, total_processes))):
+        raise RuntimeError("Pickle file already exists at {}. \n Skipping testing.".format(
+            os.path.join(save_path, "{}_all_losses_process_{}_of_{}.pkl".format(experiment, process, total_processes))))
+    else:
+        network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, experiment,
+                                                                         ["Identity"], dev)
+        for block, block_ckpt_name in zip(network_blocks, network_block_ckpt_names):
+            block.load_state_dict(torch.load(os.path.join(ckpt_path, block_ckpt_name)))
+
+        modules = []
+        module_levels = []
+        for module_ckpt in module_ckpts:
+            all_modules, all_module_ckpt_names = create_emnist_modules(experiment,
+                                                                       module_ckpt.split('_')[-1][:-3].split('-'), dev)
+            module_level = int(module_ckpt.split('_')[-2][-1]) - 1
+
+            module_levels.append(module_level)
+            modules.append(all_modules[module_level])
+            modules[-1].load_state_dict(torch.load(os.path.join(ckpt_path, module_ckpt)))
+            print("Loaded {}".format(module_ckpt))
+            print("From {}".format(os.path.join(ckpt_path, module_ckpt)))
+            print("At Abstraction Level {}".format(module_level))
+            sys.stdout.flush()
+
+    # Test the model on all compositions
+    corruption_accs = {}
+    corruption_losses = {}
+
+    corruptions = os.listdir(data_root)
+    corruptions = [c for c in corruptions if c != "raw" and c != "corruption_names.pkl"]
+    corruptions.sort()
+    assert len(corruptions) == 167  # hardcoded for EMNIST. 149 EMNIST4. 167 EMNIST5.
+    assert total_processes <= len(corruptions)
+    assert process < total_processes
+
+    corruptions_per_process = len(corruptions) // total_processes
+    if process == total_processes - 1:
+        corruptions = corruptions[corruptions_per_process * process:]
+    else:
+        corruptions = corruptions[corruptions_per_process * process:corruptions_per_process * (process + 1)]
+
+    for test_corruption in corruptions:
+        print("Testing on {}".format(test_corruption))
+        sys.stdout.flush()
+        corruption_path = os.path.join(data_root, test_corruption)
+        trained_classes = list(range(total_n_classes))
+        # Shuffle=False should give identical results for symmetric shifts
+        _, _, tst_dl = get_static_emnist_dataloaders(corruption_path, trained_classes, batch_size, False,
+                                                     n_workers, pin_mem)
+        test_modules = []
+        test_module_levels = []
+        for c in test_corruption.split('-'):
+            if c == "Identity":
+                continue
+            else:
+                test_ckpt = [m for m in module_ckpts if c in m][0]
+                test_modules.append(modules[module_ckpts.index(test_ckpt)])
+                test_module_levels.append(module_levels[module_ckpts.index(test_ckpt)])
+                print("Selected module {}".format(test_ckpt))
+        tst_loss, tst_acc = modules_loss_and_accuracy(network_blocks, test_modules, test_module_levels, tst_dl, dev)
+        corruption_accs[test_corruption] = tst_acc
+        corruption_losses[test_corruption] = tst_loss
+        print("{}, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment, test_corruption, tst_loss, tst_acc))
+        sys.stdout.flush()
+
+    # Save the results
+    with open(os.path.join(save_path, "{}_all_accs_process_{}_of_{}.pkl".format(experiment, process,
+                                                                                   total_processes)), "wb") as f:
+        pickle.dump(corruption_accs, f)
+    with open(os.path.join(save_path, "{}_all_losses_process_{}_of_{}.pkl".format(experiment, process,
+                                                                                     total_processes)), "wb") as f:
+        pickle.dump(corruption_losses, f)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Args to test networks on all corruptions in a given directory.')
     parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST5/',
@@ -224,7 +349,10 @@ if __name__ == "__main__":
     CUDA_VISIBLE_DEVICES=4 python test_emnist.py --pin-mem --check-if-run --num-processes 10 --process 0
     """
 
-    if args.test_all:
+    if args.experiment == "Modules":
+        test_modules(args.experiment, args.data_root, args.ckpt_path, args.save_path, args.total_n_classes, args.batch_size,
+                     args.n_workers, args.pin_mem, dev, args.check_if_run, args.num_processes, args.process)
+    elif args.test_all:
         test_all(args.experiment, args.data_root, args.ckpt_path, args.save_path, args.total_n_classes, args.batch_size,
                  args.n_workers, args.pin_mem, dev, args.check_if_run, args.num_processes, args.process)
     else:
