@@ -14,11 +14,22 @@ hostname
 echo $CUDA_VISIBLE_DEVICES
 echo $CUDA_DEVICE_ORDER
 echo $SLURM_ARRAY_TASK_ID
-
 module load openmind/singularity/3.5.0
+
 # Cross entropy loss -t 12:00:00
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
 # Contrastive loss -t 14:00:00
-#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "Contrastive" --weights "0,0,0,1,0" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "Contrastive" --weights "1,1,1,1,1,1" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
 # Modules -t 14:00:00
-singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "Modules" --weights "1,1,1,1,1,1" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "Modules" --weights "1,1,1,1,1,1" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
+
+# V2 tests: Now includes automodules, autocontrastive and modlevel contrastive loss
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "CrossEntropyV2" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
+# Contrastive loss -t 14:00:00
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "ContrastiveV2" --weights "1,1,1,1,1,1" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "AutoContrastiveV2" --weights "1,1,1,1,1,1" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "ModLevelContrastiveV2" --weights "1,1,1,1,1,1" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
+# Modules -t 14:00:00
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "ModulesV2" --weights "1,1,1,1,1,1" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
+singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "AutoModulesV2" --weights "1,1,1,1,1,1" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
+

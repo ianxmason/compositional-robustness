@@ -54,17 +54,17 @@ def modules_loss_and_accuracy(network_blocks, test_modules, test_module_levels, 
     with torch.no_grad():
         for data_tuple in dataloader:
             x_tst, y_tst = data_tuple[0].to(dev), data_tuple[1].to(dev)
+            features = x_tst
             for j, block in enumerate(network_blocks):
-                if j == 0:
-                    features = block(x_tst)
-                elif j == len(network_blocks) - 1:
-                    output = block(features)
-                else:
-                    features = block(features)
                 if j in test_module_levels:
                     for m, l in zip(test_modules, test_module_levels):
                         if l == j:
                             features = m(features)
+                if j != len(network_blocks) - 1:
+                    features = block(features)
+                else:
+                    output = block(features)
+
             loss = criterion(output, y_tst)
             acc = accuracy(output, y_tst)
             test_loss += loss.item()
@@ -232,7 +232,7 @@ def test_modules(experiment, data_root, ckpt_path, save_path, total_n_classes, b
         raise RuntimeError("Pickle file already exists at {}. \n Skipping testing.".format(
             os.path.join(save_path, "{}_all_losses_process_{}_of_{}.pkl".format(experiment, process, total_processes))))
     else:
-        network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, experiment,
+        network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, "Modules",
                                                                          ["Identity"], dev)
         for block, block_ckpt_name in zip(network_blocks, network_block_ckpt_names):
             block.load_state_dict(torch.load(os.path.join(ckpt_path, block_ckpt_name)))
@@ -242,7 +242,7 @@ def test_modules(experiment, data_root, ckpt_path, save_path, total_n_classes, b
         for module_ckpt in module_ckpts:
             all_modules, all_module_ckpt_names = create_emnist_modules(experiment,
                                                                        module_ckpt.split('_')[-1][:-3].split('-'), dev)
-            module_level = int(module_ckpt.split('_')[-2][-1]) - 1
+            module_level = int(module_ckpt.split('_')[-2][-1])
 
             module_levels.append(module_level)
             modules.append(all_modules[module_level])
@@ -349,7 +349,7 @@ if __name__ == "__main__":
     CUDA_VISIBLE_DEVICES=4 python test_emnist.py --pin-mem --check-if-run --num-processes 10 --process 0
     """
 
-    if args.experiment == "Modules":
+    if "Modules" in args.experiment:
         test_modules(args.experiment, args.data_root, args.ckpt_path, args.save_path, args.total_n_classes, args.batch_size,
                      args.n_workers, args.pin_mem, dev, args.check_if_run, args.num_processes, args.process)
     elif args.test_all:

@@ -16,16 +16,15 @@ from lib.utils import *
 
 
 class ContrastiveLayerLoss:
-    def __init__(self, single_corr_bs, temperature=0.15, n_views=2, dev=torch.device('cuda')):
+    def __init__(self, single_corr_bs, temperature=0.15, dev=torch.device('cuda')):
         self.single_corr_bs = single_corr_bs
         self.temperature = temperature
-        self.n_views = n_views
         self.dev = dev
 
-    def __call__(self, features, weight):
+    def __call__(self, features, weight, n_views=2):
         if weight == 0:
             return torch.tensor(0.0).to(self.dev)
-        if self.n_views <= 1:
+        if n_views <= 1:
             return torch.tensor(0.0).to(self.dev)
 
         # Flatten spatial dimensions if 4D
@@ -33,7 +32,7 @@ class ContrastiveLayerLoss:
         assert len(features) % self.single_corr_bs == 0
         features = F.normalize(features, dim=1)
 
-        labels = torch.cat([torch.arange(self.single_corr_bs) for _ in range(self.n_views)], dim=0)
+        labels = torch.cat([torch.arange(self.single_corr_bs) for _ in range(n_views)], dim=0)
         labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
         labels = labels.to(self.dev)
 
@@ -60,7 +59,7 @@ class ContrastiveLayerLoss:
         We want a more general case with arbitrary n_views (== number of corruptions in the batch)
         As a starting point for why this works: https://github.com/sthalles/SimCLR/issues/16 (also issue 33)
         """
-        for i in range(self.n_views - 1):
+        for i in range(n_views - 1):
             logits = torch.cat([positives[:, i:i+1], negatives], dim=1)
             logits = logits / self.temperature
             if i == 0:
@@ -99,20 +98,44 @@ def cross_entropy_forwards_pass(network_blocks, x, y, cross_entropy_loss, accura
     return cross_entropy_loss(output, y), accuracy_fn(output, y)
 
 
-def contrastive_forwards_pass(network_blocks, x, y, cross_entropy_loss, accuracy_fn, contrastive_loss, weights):
+def contrastive_forwards_pass(network_blocks, x, y, cross_entropy_loss, accuracy_fn, contrastive_loss,
+                              abstraction_levels, weights, single_corr_bs):
     """
-    Network forwards pass with an option to apply the contrastive loss at any intermediate layer (weighted by weights)
+    Network forwards pass with an option to apply the contrastive loss at any intermediate layer
+    The contrastive loss is weighted by weights
+    The level to apply the loss is defined by abstraction_levels
     """
     total_ctv_loss = 0.0
+    id_idx = len(abstraction_levels)  # Hardcoded assumption that Identity is last in the batch
+    if 0 in abstraction_levels:
+        raise ValueError("Contrastive loss cannot be applied before the first layer")
+    features = x
     for i, block in enumerate(network_blocks):
-        if i == 0:
-            features = block(x)
-            total_ctv_loss += contrastive_loss(features, weights[i])
-        elif i == len(network_blocks) - 1:
-            output = block(features)
-        else:
+        if i in abstraction_levels:
+            loss_features = []
+            n_views = 0
+            for corr_idx, a in enumerate(abstraction_levels):
+                if a == i:
+                    if len(features.shape) == 4:
+                        loss_features.append(features[corr_idx * single_corr_bs:(corr_idx + 1) * single_corr_bs, :, :, :])
+                    elif len(features.shape) == 2:
+                        loss_features.append(features[corr_idx * single_corr_bs:(corr_idx + 1) * single_corr_bs, :])
+                    else:
+                        raise ValueError("Features must be 2d or 4d. Level {}.".format(i))
+                    n_views += 1
+            if len(features.shape) == 4:
+                loss_features.append(features[id_idx * single_corr_bs:(id_idx + 1) * single_corr_bs, :, :, :])
+            elif len(features.shape) == 2:
+                loss_features.append(features[id_idx * single_corr_bs:(id_idx + 1) * single_corr_bs, :])
+            else:
+                raise ValueError("Features must be 2d or 4d. Level {}.".format(i))
+            n_views += 1
+            loss_features = torch.cat(loss_features, dim=0)
+            total_ctv_loss += contrastive_loss(loss_features, weights[i], n_views=n_views)
+        if i != len(network_blocks) - 1:
             features = block(features)
-            total_ctv_loss += contrastive_loss(features, weights[i])
+        else:
+            output = block(features)
 
     return cross_entropy_loss(output, y), total_ctv_loss, accuracy_fn(output, y)
 
@@ -131,24 +154,24 @@ def modules_forwards_pass(network_blocks, module, module_level, x, y, cross_entr
     for i, block in enumerate(network_blocks):
         if i == module_level:
             if len(features.shape) == 4:
-                id_features = features[:single_corr_bs, :, :, :]
+                id_features = features[single_corr_bs:, :, :, :]
                 id_features = id_features.reshape(id_features.shape[0], -1)  # Flatten spatial dimensions
             elif len(features.shape) == 2:
-                id_features = features[:single_corr_bs, :]
+                id_features = features[single_corr_bs:, :]
             else:
-                raise RuntimeError("Features must be 2d or 4d. Level {}.".format(i))
+                raise ValueError("Features must be 2d or 4d. Level {}.".format(i))
 
             features = module(features)
 
             if len(features.shape) == 4:
-                corr_features = features[single_corr_bs:, :, :, :]
+                corr_features = features[:single_corr_bs, :, :, :]
                 corr_features = corr_features.reshape(corr_features.shape[0], -1)  # Flatten spatial dimensions
             elif len(features.shape) == 2:
-                corr_features = features[single_corr_bs:, :]
+                corr_features = features[:single_corr_bs, :]
             else:
-                raise RuntimeError("Features must be 2d or 4d. Level {}.".format(i))
+                raise ValueError("Features must be 2d or 4d. Level {}.".format(i))
 
-            total_ctv_loss += contrastive_loss(torch.cat((id_features, corr_features), dim=0), weight)
+            total_ctv_loss += contrastive_loss(torch.cat((corr_features, id_features), dim=0), weight, n_views=2)
 
         if i != len(network_blocks) - 1:
             features = block(features)
@@ -256,8 +279,133 @@ def train_identity_network(network_blocks, network_block_ckpt_names, data_root, 
     return network_blocks
 
 
-def find_abstraction_level(network_blocks, trn_dls, val_dls, lr, cross_entropy_loss, accuracy_fn, contrastive_loss,
-                           weights, single_corr_bs, dev, num_iterations=50, num_repeats=3):
+def find_contrastive_abstraction_level(corruption_names, trn_dls, val_dls, lr, cross_entropy_loss, accuracy_fn,
+                                       contrastive_loss, weights, total_n_classes, single_corr_bs, dev,
+                                       num_iterations=200, num_repeats=3):
+    """
+    Finds the best level to apply the contrastive loss at for all given corruptions.
+
+    Returns a list of abstraction levels with the best level for each corruption in the same order as the corruptions.
+
+    e.g. if corruption_names = ["Invert", "Rotate90", "Identity"] the return will look like [1,3]
+         there is no level of abstraction for Identity
+
+    Hardcoded assumptions
+    1. the batch size is a multiple of single_corr_bs
+    2. the identity data is the last corruption in the batch
+    """
+    network_blocks, _ = create_emnist_network(total_n_classes, "temp", "temp", dev)
+    id_idx = corruption_names.index("Identity")
+    assert id_idx == len(corruption_names) - 1  # Identity must be the last corruption
+    val_accs = {}
+    for corr in corruption_names:
+        if corr == "Identity":
+            continue
+        val_accs[corr] = [0.0] * (len(network_blocks) - 1)
+
+    for _ in range(num_repeats):
+        for i, corr in enumerate(corruption_names):
+            if i == id_idx:
+                continue
+
+            print("Finding contrastive abstraction level for {}".format(corr))
+            for j in range(1, len(network_blocks)):
+                network_blocks, _ = create_emnist_network(total_n_classes, "temp", "temp", dev)
+                temp_parameters = []
+                for block in network_blocks:
+                    temp_parameters += list(block.parameters())
+                temp_optim = torch.optim.Adam(temp_parameters, lr)
+
+                print("Abstraction level {}".format(j))
+                abstraction_levels = [j]
+                for block in network_blocks:
+                    block.train()
+
+                cont_ce_loss = 0.0
+                cont_ctv_loss = 0.0
+                cont_acc = 0.0
+
+                for k, trn_data_tuples in enumerate(zip(*trn_dls), 1):
+                    x_trn, y_trn = generate_batch(trn_data_tuples, dev)
+                    # Slice out the corruption in question and the identity corruption
+                    x_trn = torch.cat((x_trn[i * single_corr_bs:(i + 1) * single_corr_bs, :, :, :],
+                                       x_trn[id_idx * single_corr_bs:(id_idx + 1) * single_corr_bs, :, :, :]), dim=0)
+                    y_trn = torch.cat((y_trn[i * single_corr_bs:(i + 1) * single_corr_bs],
+                                       y_trn[id_idx * single_corr_bs:(id_idx + 1) * single_corr_bs]), dim=0)
+
+                    temp_optim.zero_grad()
+                    # Only called when "Contrastive" in experiment
+                    ce_loss, ctv_loss, acc = contrastive_forwards_pass(network_blocks, x_trn, y_trn,
+                                                                       cross_entropy_loss, accuracy_fn,
+                                                                       contrastive_loss, abstraction_levels, weights,
+                                                                       single_corr_bs)
+
+                    loss = ce_loss + ctv_loss
+                    cont_ce_loss += ce_loss.item()
+                    cont_ctv_loss += ctv_loss.item()
+                    cont_acc += acc
+
+                    loss.backward()
+                    temp_optim.step()
+
+                    if k >= num_iterations:
+                        print("Trained for {} batches.".format(k))
+                        break
+
+                if len(trn_dls[0]) < num_iterations:
+                    denominator = len(trn_dls[0])
+                else:
+                    denominator = num_iterations
+
+                print("CE Loss: {}".format(cont_ce_loss / denominator))
+                print("CTV Loss: {}".format(cont_ctv_loss / denominator))
+                print("Accuracy: {}".format(cont_acc / denominator))
+
+                for block in network_blocks:
+                    block.eval()
+                valid_cont_ce_loss = 0.0
+                valid_cont_ctv_loss = 0.0
+                valid_cont_total_loss = 0.0
+                valid_cont_acc = 0.0
+                with torch.no_grad():
+                    for k, val_data_tuples in enumerate(zip(*val_dls), 1):
+                        x_val, y_val = generate_batch(val_data_tuples, dev)
+                        ce_loss, ctv_loss, acc = contrastive_forwards_pass(network_blocks, x_val, y_val,
+                                                                           cross_entropy_loss, accuracy_fn,
+                                                                           contrastive_loss,  abstraction_levels, weights,
+                                                                           single_corr_bs)
+                        valid_cont_ce_loss += ce_loss.item()
+                        valid_cont_ctv_loss += ctv_loss.item()
+                        valid_cont_total_loss += ce_loss.item() + ctv_loss.item()
+                        valid_cont_acc += acc
+
+                        if k >= num_iterations:
+                            print("Validated for {} batches.".format(k))
+                            break
+
+                if len(val_dls[0]) < num_iterations:
+                    denominator = len(val_dls[0])
+                else:
+                    denominator = num_iterations
+                print("Validation CE loss {:6.4f}".format(valid_cont_ce_loss / denominator))
+                print("Validation contrastive loss {:6.4f}".format(valid_cont_ctv_loss / denominator))
+                print("Validation accuracy {:6.3f}".format(valid_cont_acc / denominator))
+                val_accs[corr][j - 1] += valid_cont_acc / denominator
+
+    for k, v in val_accs.items():
+        val_accs[k] = [x / num_repeats for x in v]
+    # print(val_accs)
+    abstraction_levels = []
+    for corr in corruption_names:
+        if corr == "Identity":
+            continue
+        abstraction_levels.append(val_accs[corr].index(max(val_accs[corr])) + 1)
+    assert len(abstraction_levels) == len(corruption_names) - 1
+    return abstraction_levels
+
+
+def find_module_abstraction_level(network_blocks, trn_dls, val_dls, lr, cross_entropy_loss, accuracy_fn,
+                                  contrastive_loss, weights, single_corr_bs, dev, num_iterations=50, num_repeats=5):
     """
     Tries training the network with modules at every level of abstraction. Trains for num_iterations update steps.
     Repeats the experiment num_repeats times. Returns the level of abstraction that gives the best mean performance.
@@ -385,7 +533,7 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
                     raise ValueError("Initial module training only uses single corruptions (plus the identity)")
 
                 # Load identity network or create it if it doesn't exist
-                network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, experiment,
+                network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, "Modules",
                                                                                  ["Identity"], dev)
                 assert len(network_blocks) >= 2  # assumed when the network is called
                 assert len(weights) == len(network_blocks)  # one module before each layer (including image space)
@@ -427,15 +575,28 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
         cross_entropy_loss = nn.CrossEntropyLoss()
         accuracy_fn = lambda x, y: accuracy(x, y)
         if "Contrastive" in experiment or "Modules" in experiment:
-            contrastive_loss = ContrastiveLayerLoss(single_corr_bs, temperature, len(corruption_names), dev)
+            contrastive_loss = ContrastiveLayerLoss(single_corr_bs, temperature, dev)
 
         # Network & Optimizer Set Up
-        if "Modules" not in experiment:
+        if "Modules" not in experiment:  # CrossEntropy and Contrastive
+            if "Contrastive" in experiment:
+                if "Auto" in experiment:
+                    logger.info("Choosing Levels of Abstraction")
+                    contrastive_levels = find_contrastive_abstraction_level(corruption_names, trn_dls, val_dls, lr,
+                                                                            cross_entropy_loss, accuracy_fn,
+                                                                            contrastive_loss, weights, total_n_classes,
+                                                                            single_corr_bs, dev)
+                elif "ModLevel" in experiment:  # Hardcoded to match the best AutoModules levels of abstraction seen so far
+                    contrastive_levels = [1, 1, 1, 2, 3, 4]
+                else:  # Penultimate layer (fully connected)
+                    contrastive_levels = [5] * (len(corruption_names) - 1)
+                logger.info("Using Levels of Abstraction {}".format(contrastive_levels))
+
             network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, experiment,
                                                                              corruption_names, dev)
             assert len(network_blocks) >= 2  # assumed when the network is called
             if weights is not None:
-                assert len(weights) == len(network_blocks) - 1
+                assert len(weights) == len(network_blocks)
             all_parameters = []
             for block in network_blocks:
                 all_parameters += list(block.parameters())
@@ -446,17 +607,21 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
             early_stoppings = [EarlyStopping(patience=25, verbose=True, path=es_ckpt_path, trace_func=logger.info) for
                                es_ckpt_path in es_ckpt_paths]
             assert len(early_stoppings) == len(network_blocks)
-        else:
-            logger.info("Choosing Level of Abstraction")
-            module_level = find_abstraction_level(network_blocks, trn_dls, val_dls, lr, cross_entropy_loss, accuracy_fn,
-                                                  contrastive_loss, weights, single_corr_bs, dev)
-            logger.info("Selected Best Level of Abstraction {}".format(module_level))
-
-            # Rough heuristic approach.
-            # if "Contrast" in corruption_names or "GaussianBlur" in corruption_names or "ImpulseNoise" in corruption_names or "Invert" in corruption_names:
-            #     module_level = 1
-            # else:
-            #     module_level = 3
+        elif "Modules" in experiment:
+            if "Auto" in experiment:
+                logger.info("Choosing Level of Abstraction")
+                module_level = find_module_abstraction_level(network_blocks, trn_dls, val_dls, lr, cross_entropy_loss,
+                                                             accuracy_fn, contrastive_loss, weights, single_corr_bs,
+                                                             dev)
+                logger.info("Selected Best Level of Abstraction {}".format(module_level))
+            else:
+                logger.info("Manually Defined Level of Abstraction")
+                if "Contrast" in corruption_names or "GaussianBlur" in corruption_names or \
+                        "ImpulseNoise" in corruption_names or "Invert" in corruption_names:
+                    module_level = 1  # After first conv layer for local corruptions
+                else:
+                    module_level = 4  # After last conv layer for long range dependencies
+                logger.info("Using Level of Abstraction {}".format(module_level))
 
             modules, module_ckpt_names = create_emnist_modules(experiment, corruption_names, dev)
             # Last conv layer by default
@@ -472,6 +637,8 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
                 print("Checkpoint already exists at {} \nSkipping training on corruption(s): {}".format(
                     os.path.join(ckpt_path, module_ckpt_name), corruption_names))
                 continue
+        else:
+            raise NotImplementedError("Experiment {} not implemented".format(experiment))
 
         # We want to check for early stopping after approximately equal number of batches:
         val_freq = len(trn_dls[0]) // len(corruption_names)
@@ -504,7 +671,8 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
                 elif "Contrastive" in experiment:
                     ce_loss, ctv_loss, acc = contrastive_forwards_pass(network_blocks, x_trn, y_trn,
                                                                        cross_entropy_loss, accuracy_fn,
-                                                                       contrastive_loss, weights)
+                                                                       contrastive_loss, contrastive_levels, weights,
+                                                                       single_corr_bs)
                     loss = ce_loss + ctv_loss
                     epoch_ce_loss += ce_loss.item()
                     epoch_ctv_loss += ctv_loss.item()
@@ -549,7 +717,8 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
                             elif "Contrastive" in experiment:
                                 ce_loss, ctv_loss, acc = contrastive_forwards_pass(network_blocks, x_val, y_val,
                                                                                    cross_entropy_loss, accuracy_fn,
-                                                                                   contrastive_loss, weights)
+                                                                                   contrastive_loss, contrastive_levels,
+                                                                                   weights, single_corr_bs)
                                 valid_ce_loss += ce_loss.item()
                                 valid_ctv_loss += ctv_loss.item()
                                 valid_total_loss += ce_loss.item() + ctv_loss.item()
@@ -624,7 +793,8 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
                 elif "Contrastive" in experiment:
                     ce_loss, ctv_loss, acc = contrastive_forwards_pass(network_blocks, x_val, y_val,
                                                                        cross_entropy_loss, accuracy_fn,
-                                                                       contrastive_loss, weights)
+                                                                       contrastive_loss, contrastive_levels, weights,
+                                                                       single_corr_bs)
                     valid_ce_loss += ce_loss.item()
                     valid_ctv_loss += ctv_loss.item()
                     valid_acc += acc
@@ -709,11 +879,11 @@ if __name__ == "__main__":
         all_corruptions = pickle.load(f)
 
     corruptions = []
-    # Training on only the corruptions in the composition. Always include identity, remove permutations
+    # Training on only the corruptions in the composition. Always include identity at the end, remove permutations
     for corr in all_corruptions:
-        if 'Identity' not in corr:
+        if "Identity" not in corr:
             corr.sort()
-            corr += ['Identity']
+            corr += ["Identity"]
             if corr not in corruptions:
                 corruptions.append(corr)
         elif len(corr) == 1:  # identity only
@@ -740,7 +910,7 @@ if __name__ == "__main__":
     """
     If running on polestar
     CUDA_VISIBLE_DEVICES=4 python train_emnist.py --pin-mem --check-if-run --corruption-ID 0 -experiment CrossEntropy
-    CUDA_VISIBLE_DEVICES=4 python train_emnist.py --pin-mem --check-if-run --corruption-ID 34 --vis-data --experiment Contrastive --weights 0,0,0,0,10
+    CUDA_VISIBLE_DEVICES=4 python train_emnist.py --pin-mem --check-if-run --corruption-ID 34 --vis-data --experiment Contrastive --weights  1,1,1,1,1,1
     CUDA_VISIBLE_DEVICES=4 python train_emnist.py --pin-mem --check-if-run --corruption-ID 0 --experiment Modules --weights 1,1,1,1,1,1
     """
 

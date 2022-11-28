@@ -60,6 +60,26 @@ def main(elemental_corruptions, experiments, results_path, save_path):
             losses_df = losses_df.append(pd.DataFrame(data=all_losses, index=[experiment]))
             accs_df = accs_df.append(pd.DataFrame(data=all_accs, index=[experiment]))
 
+    # print(accs_df)
+    # print(losses_df)
+    # print(len(accs_df))
+
+    # Column reordeing shows an easier to read heatmap
+    ordered_columns = list(accs_df.columns)
+    ordered_columns.sort(key=lambda x: (x.count('-'), x.lower()))
+    reordered_cols = []
+    for comp_1 in ordered_columns:
+        if comp_1 in reordered_cols:
+            continue
+        reordered_cols.append(comp_1)
+        for comp_2 in ordered_columns:
+            if comp_2 in reordered_cols:
+                continue
+            if sorted(comp_1) == sorted(comp_2):
+                reordered_cols.append(comp_2)
+    accs_df = accs_df[reordered_cols]
+    losses_df = losses_df[reordered_cols]
+
     print(accs_df)
     print(losses_df)
     print(len(accs_df))
@@ -160,10 +180,13 @@ if __name__ == "__main__":
                         help="path to directory to save analysis plots and pickle files")
     args = parser.parse_args()
 
-    experiments = ["CrossEntropy", "Contrastive", "Modules"]
+    # experiments = ["CrossEntropy", "Contrastive", "Modules"]
+    experiments = ["CrossEntropyV2",
+                   "ContrastiveV2", "AutoContrastiveV2", "ModLevelContrastiveV2",
+                   "ModulesV2", "AutoModulesV2"]
 
     # Set seeding
-    reset_rngs(seed=13579, deterministic=True)
+    reset_rngs(seed=1357911, deterministic=True)
 
     # Create unmade directories
     mkdir_p(args.save_path)
