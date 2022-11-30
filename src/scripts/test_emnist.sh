@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -t 0:15:00                   #  walltime hh:mm:ss.
+#SBATCH -t 0:30:00                   #  walltime hh:mm:ss.
 #SBATCH -N 1                         #  one node
 #SBATCH -n 8                         #  CPU cores
 #SBATCH -x dgx001,dgx002,node[093,094,097,098,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115]  #  had this issue https://github.mit.edu/MGHPCC/OpenMind/issues/3375
@@ -32,7 +32,7 @@ do
               python test_emnist.py --pin-mem \
                                     --check-if-run \
                                     --test-all \
-                                    --experiment "AutoModulesV2" \
+                                    --experiment "ContrastiveL3W10" \
                                     --num-processes $(($SLURM_ARRAY_TASK_COUNT * $jobs_per_gpu)) \
                                     --process $(($SLURM_ARRAY_TASK_ID * $jobs_per_gpu + $number)) &
 done

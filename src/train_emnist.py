@@ -853,7 +853,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Set seeding
-    reset_rngs(seed=1357911, deterministic=True)
+    reset_rngs(seed=246810, deterministic=True)
 
     # Set device
     if args.cpu:

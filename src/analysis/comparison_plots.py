@@ -181,9 +181,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # experiments = ["CrossEntropy", "Contrastive", "Modules"]
-    experiments = ["CrossEntropyV2",
-                   "ContrastiveV2", "AutoContrastiveV2", "ModLevelContrastiveV2",
-                   "ModulesV2", "AutoModulesV2"]
+    # experiments = ["CrossEntropyV2",
+    #                "ContrastiveV2", "AutoContrastiveV2", "ModLevelContrastiveV2",
+    #                "ModulesV2", "AutoModulesV2"]
+    experiments = ["ModLevelContrastiveV3",
+                   "ContrastiveL3W01", "ContrastiveL3W1", "ContrastiveL3W10",
+                   "ContrastiveL4W01", "ContrastiveL4W1", "ContrastiveL4W10",
+                   "ContrastiveL5W01", "ContrastiveL5W1", "ContrastiveL5W10"]
 
     # Set seeding
     reset_rngs(seed=1357911, deterministic=True)
