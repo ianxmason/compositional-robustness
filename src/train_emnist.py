@@ -141,12 +141,13 @@ def contrastive_forwards_pass(network_blocks, x, y, cross_entropy_loss, accuracy
 
 
 def modules_forwards_pass(network_blocks, module, module_level, x, y, cross_entropy_loss, accuracy_fn, contrastive_loss,
-                          weight, single_corr_bs):
+                          weight, single_corr_bs, pass_through):
     """
     Network forwards pass with a module applied at a specified intermediate layer
+
+    pass_through: if True, the module is applied to both identity and corruption features
+                  if False, the module is applied only to the corruption features
     """
-    if weight == 0:
-        raise ValueError("Weight must be non-zero for module forwards pass. Level {}.".format(module_level))
     if module_level < 0 or module_level >= len(network_blocks):
         raise ValueError("Module must be applied at an intermediate layer. Level {}.".format(module_level))
     total_ctv_loss = 0.0
@@ -155,22 +156,29 @@ def modules_forwards_pass(network_blocks, module, module_level, x, y, cross_entr
         if i == module_level:
             if len(features.shape) == 4:
                 id_features = features[single_corr_bs:, :, :, :]
-                id_features = id_features.reshape(id_features.shape[0], -1)  # Flatten spatial dimensions
             elif len(features.shape) == 2:
                 id_features = features[single_corr_bs:, :]
             else:
                 raise ValueError("Features must be 2d or 4d. Level {}.".format(i))
 
-            features = module(features)
+            if pass_through:
+                features = module(features)
+            else:
+                if len(features.shape) == 4:
+                    features = module(features[:single_corr_bs, :, :, :])
+                else:
+                    features = module(features[:single_corr_bs, :])
+                features = torch.cat((features, id_features), dim=0)
 
             if len(features.shape) == 4:
                 corr_features = features[:single_corr_bs, :, :, :]
-                corr_features = corr_features.reshape(corr_features.shape[0], -1)  # Flatten spatial dimensions
             elif len(features.shape) == 2:
                 corr_features = features[:single_corr_bs, :]
             else:
                 raise ValueError("Features must be 2d or 4d. Level {}.".format(i))
 
+            corr_features = corr_features.reshape(corr_features.shape[0], -1)  # Flatten spatial dimensions if necessary
+            id_features = id_features.reshape(id_features.shape[0], -1)  # Flatten spatial dimensions if necessary
             total_ctv_loss += contrastive_loss(torch.cat((corr_features, id_features), dim=0), weight, n_views=2)
 
         if i != len(network_blocks) - 1:
@@ -405,7 +413,8 @@ def find_contrastive_abstraction_level(corruption_names, trn_dls, val_dls, lr, c
 
 
 def find_module_abstraction_level(network_blocks, trn_dls, val_dls, lr, cross_entropy_loss, accuracy_fn,
-                                  contrastive_loss, weights, single_corr_bs, dev, num_iterations=50, num_repeats=5):
+                                  contrastive_loss, weights, single_corr_bs, dev, pass_through, num_iterations=50,
+                                  num_repeats=5):
     """
     Tries training the network with modules at every level of abstraction. Trains for num_iterations update steps.
     Repeats the experiment num_repeats times. Returns the level of abstraction that gives the best mean performance.
@@ -434,7 +443,7 @@ def find_module_abstraction_level(network_blocks, trn_dls, val_dls, lr, cross_en
                 # Only called when "Modules" in experiment
                 ce_loss, ctv_loss, acc = modules_forwards_pass(network_blocks, module, i, x_trn, y_trn,
                                                                cross_entropy_loss, accuracy_fn, contrastive_loss,
-                                                               weights[i], single_corr_bs)
+                                                               weights[i], single_corr_bs, pass_through)
                 loss = ce_loss + ctv_loss
                 module_ce_loss += ce_loss.item()
                 module_ctv_loss += ctv_loss.item()
@@ -465,7 +474,7 @@ def find_module_abstraction_level(network_blocks, trn_dls, val_dls, lr, cross_en
                     x_val, y_val = generate_batch(val_data_tuples, dev)
                     ce_loss, ctv_loss, acc = modules_forwards_pass(network_blocks, module, i, x_val, y_val,
                                                                    cross_entropy_loss, accuracy_fn, contrastive_loss,
-                                                                   weights[i], single_corr_bs)
+                                                                   weights[i], single_corr_bs, pass_through)
                     module_valid_ce_loss += ce_loss.item()
                     module_valid_ctv_loss += ctv_loss.item()
                     module_valid_total_loss += ce_loss.item() + ctv_loss.item()
@@ -533,7 +542,7 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
                     raise ValueError("Initial module training only uses single corruptions (plus the identity)")
 
                 # Load identity network or create it if it doesn't exist
-                network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, "Modules",
+                network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, "ModulesV3",
                                                                                  ["Identity"], dev)
                 assert len(network_blocks) >= 2  # assumed when the network is called
                 assert len(weights) == len(network_blocks)  # one module before each layer (including image space)
@@ -608,11 +617,15 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
                                es_ckpt_path in es_ckpt_paths]
             assert len(early_stoppings) == len(network_blocks)
         elif "Modules" in experiment:
+            if "NoPassThrough" in experiment:
+                pass_through = False
+            else:
+                pass_through = True
             if "Auto" in experiment:
                 logger.info("Choosing Level of Abstraction")
                 module_level = find_module_abstraction_level(network_blocks, trn_dls, val_dls, lr, cross_entropy_loss,
                                                              accuracy_fn, contrastive_loss, weights, single_corr_bs,
-                                                             dev)
+                                                             dev, pass_through)
                 logger.info("Selected Best Level of Abstraction {}".format(module_level))
             else:
                 logger.info("Manually Defined Level of Abstraction")
@@ -680,7 +693,7 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
                 elif "Modules" in experiment:
                     ce_loss, ctv_loss, acc = modules_forwards_pass(network_blocks, module, module_level, x_trn, y_trn,
                                                                    cross_entropy_loss, accuracy_fn, contrastive_loss,
-                                                                   weights[module_level], single_corr_bs)
+                                                                   weights[module_level], single_corr_bs, pass_through)
                     loss = ce_loss + ctv_loss
                     epoch_ce_loss += ce_loss.item()
                     epoch_ctv_loss += ctv_loss.item()
@@ -728,7 +741,8 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
                                                                                x_val, y_val,
                                                                                cross_entropy_loss, accuracy_fn,
                                                                                contrastive_loss,
-                                                                               weights[module_level], single_corr_bs)
+                                                                               weights[module_level], single_corr_bs,
+                                                                               pass_through)
                                 valid_ce_loss += ce_loss.item()
                                 valid_ctv_loss += ctv_loss.item()
                                 valid_total_loss += ce_loss.item() + ctv_loss.item()
@@ -801,7 +815,7 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
                 elif "Modules" in experiment:
                     ce_loss, ctv_loss, acc = modules_forwards_pass(network_blocks, module, module_level, x_val, y_val,
                                                                    cross_entropy_loss, accuracy_fn, contrastive_loss,
-                                                                   weights[module_level], single_corr_bs)
+                                                                   weights[module_level], single_corr_bs, pass_through)
                     valid_ce_loss += ce_loss.item()
                     valid_ctv_loss += ctv_loss.item()
                     valid_acc += acc

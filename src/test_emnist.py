@@ -232,7 +232,7 @@ def test_modules(experiment, data_root, ckpt_path, save_path, total_n_classes, b
         raise RuntimeError("Pickle file already exists at {}. \n Skipping testing.".format(
             os.path.join(save_path, "{}_all_losses_process_{}_of_{}.pkl".format(experiment, process, total_processes))))
     else:
-        network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, "Modules",
+        network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, "ModulesV3",
                                                                          ["Identity"], dev)
         for block, block_ckpt_name in zip(network_blocks, network_block_ckpt_names):
             block.load_state_dict(torch.load(os.path.join(ckpt_path, block_ckpt_name)))
@@ -328,7 +328,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Set seeding
-    reset_rngs(seed=13579, deterministic=True)
+    reset_rngs(seed=246810, deterministic=True)
 
     # Set device
     if args.cpu:

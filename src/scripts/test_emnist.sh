@@ -24,6 +24,14 @@ module load openmind/singularity/3.5.0
 # "ModulesV2"
 # "AutoModulesV2"
 
+# For module comparisons
+# "ModulesV3"
+# "ModulesV3NoPassThrough"
+# "ModulesV3NoInvariance"
+# "AutoModulesV3"
+# "AutoModulesV3NoPassThrough"
+# "AutoModulesV3NoInvariance"
+
 # Trades off ram for runtime. Needs at least 16G, with 12G many jobs hang indefinitely.
 jobs_per_gpu=4
 for ((number=0; number<$jobs_per_gpu; number++))
@@ -32,7 +40,7 @@ do
               python test_emnist.py --pin-mem \
                                     --check-if-run \
                                     --test-all \
-                                    --experiment "ContrastiveL3W10" \
+                                    --experiment "AutoModulesV3" \
                                     --num-processes $(($SLURM_ARRAY_TASK_COUNT * $jobs_per_gpu)) \
                                     --process $(($SLURM_ARRAY_TASK_ID * $jobs_per_gpu + $number)) &
 done
