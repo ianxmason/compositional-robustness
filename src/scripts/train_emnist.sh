@@ -4,7 +4,7 @@
 #SBATCH -n 2                         #  CPU cores
 #SBATCH -x dgx001,dgx002,node[093,094,097,098,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115]  #  had this issue https://github.mit.edu/MGHPCC/OpenMind/issues/3375
 #SBATCH -o /om2/user/imason/compositions/slurm/EMNIST5/slurm-%j.out    # file to send output to
-#SBATCH --array=0-5                  #  Modules: 0-5. Contrastive/CE: 0. EMNIST5: 0-63. The elemental sets of corruptions as separate jobs
+#SBATCH --array=0-5                  #  Modules/ImgSpace: 0-5. Contrastive/CE: 0. EMNIST5: 0-63. The elemental sets of corruptions as separate jobs
 #SBATCH --mem=12G                    #  RAM
 #SBATCH --gres=gpu:1                 #  one GPU
 #SBATCH --constraint=11GB            #  any-gpu any gpu on cluster (may not be compatible with pytorch.
@@ -32,7 +32,8 @@ module load openmind/singularity/3.5.0
 # Modules -t 14:00:00
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "ModulesV2" --weights "1,1,1,1,1,1" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "AutoModulesV2" --weights "1,1,1,1,1,1" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
-
+# Autoencoders -t 14:00:00
+singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "ImgSpaceV2" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
 
 # Contrastive Comparisons
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "ModLevelContrastiveV3" --weights "1,1,1,1,1,1" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
@@ -48,5 +49,5 @@ module load openmind/singularity/3.5.0
 
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "AutoModulesV3" --weights "1,1,1,1,1,1" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "AutoModulesV3NoPassThrough" --weights "1,1,1,1,1,1" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
-singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "AutoModulesV3NoInvariance" --weights "0,0,0,0,0,0" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "AutoModulesV3NoInvariance" --weights "0,0,0,0,0,0" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
 

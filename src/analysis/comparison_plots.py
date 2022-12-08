@@ -181,6 +181,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # experiments = ["CrossEntropy", "Contrastive", "Modules"]
+
     # experiments = ["CrossEntropyV2",
     #                "ContrastiveV2", "AutoContrastiveV2", "ModLevelContrastiveV2",
     #                "ModulesV2", "AutoModulesV2"]
@@ -190,8 +191,30 @@ if __name__ == "__main__":
     #                "ContrastiveL4W01", "ContrastiveL4W1", "ContrastiveL4W10",
     #                "ContrastiveL5W01", "ContrastiveL5W1", "ContrastiveL5W10"]
 
-    experiments = ["ModulesV3", "ModulesV3NoPassThrough", "ModulesV3NoInvariance",
-                   "AutoModulesV3", "AutoModulesV3NoPassThrough", "AutoModulesV3NoInvariance"]
+    # experiments = ["ModulesV3", "ModulesV3NoPassThrough", "ModulesV3NoInvariance",
+    #                "AutoModulesV3", "AutoModulesV3NoPassThrough", "AutoModulesV3NoInvariance"]
+
+    """
+    WARNING - these are 'best case'/cherry picked experiments. Not actually the true/final results.
+    Summarising above 3 experiments. This shows:
+    - With hparam tuning contrastive is similar/better than cross entropy (without hparam tuning)
+    - Different levels of contrastive seem a lot worse
+    - Modules are better than contrastive when applied at right level
+    - Pass through seems to be neither good nor bad
+    - Invariance loss in modules is essential
+    - Automodules are best as they find better level for the modules
+    - Variance across automodules experiments is high(ish) due to finding different levels of abstraction
+    """
+    # experiments = ["CrossEntropyV2",
+    #                "ContrastiveL5W01", "ModLevelContrastiveV3",
+    #                "ModulesV2", "ModulesV3", "ModulesV3NoPassThrough", "ModulesV3NoInvariance",
+    #                "AutoModulesV2", "AutoModulesV3"]
+
+
+    experiments = ["CrossEntropyV2",
+                   "ContrastiveL5W01",
+                   "ModulesV2", "AutoModulesV2",
+                   "ImgSpaceV2IdentityClassifier", "ImgSpaceV2JointClassifier"]
 
     # Set seeding
     reset_rngs(seed=1357911, deterministic=True)

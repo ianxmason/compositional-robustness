@@ -7,8 +7,9 @@ import sys
 import torch
 import torch.nn as nn
 import pickle
+from data.data_transforms import denormalize
 from data.data_loaders import get_static_emnist_dataloaders
-from lib.networks import create_emnist_network, create_emnist_modules
+from lib.networks import create_emnist_network, create_emnist_modules, create_emnist_autoencoder
 from lib.utils import *
 from lib.equivariant_hooks import *
 
@@ -61,6 +62,64 @@ def modules_loss_and_accuracy(network_blocks, test_modules, test_module_levels, 
                         if l == j:
                             features = m(features)
                 if j != len(network_blocks) - 1:
+                    features = block(features)
+                else:
+                    output = block(features)
+
+            loss = criterion(output, y_tst)
+            acc = accuracy(output, y_tst)
+            test_loss += loss.item()
+            test_acc += acc
+
+    return test_loss / len(dataloader), test_acc / len(dataloader)
+
+
+def autoencoders_loss_and_accuracy(all_ae_blocks, clsf_blocks, dataloader, dev):
+    assert len(clsf_blocks) >= 2  # assumed when the network is called
+    criterion = nn.CrossEntropyLoss()
+    for ae_blocks in all_ae_blocks:
+        for block in ae_blocks:
+            block.eval()
+    for block in clsf_blocks:
+        block.eval()
+
+    # Autoencoders are applied as follows:
+    # 1. the earlier the corruption is in the test corruption name the earlier the autoencoder is applied
+    test_loss = 0.0
+    test_acc = 0.0
+    with torch.no_grad():
+        for data_tuple in dataloader:
+            x_tst, y_tst = data_tuple[0].to(dev), data_tuple[1].to(dev)
+            features = x_tst
+
+            # Sanity check to comment in for visualising before and after autoencoding
+            # vis_path = '/om2/user/imason/compositions/figs/EMNIST5/visualisations/'
+            # fig_name = "before_ae.png"
+            # fig_path = os.path.join(vis_path, fig_name)
+            # # Denormalise Images
+            # x = features.detach().cpu().numpy()
+            # y = y_tst.detach().cpu().numpy()
+            # x = denormalize(x).astype(np.uint8)
+            # # And visualise
+            # visualise_data(x[:25], y[:25], save_path=fig_path, title=fig_name[:-4], n_rows=5, n_cols=5)
+
+            for ae_blocks in all_ae_blocks:
+                for block in ae_blocks:
+                    features = block(features)
+
+            # vis_path = '/om2/user/imason/compositions/figs/EMNIST5/visualisations/'
+            # fig_name = "after_ae.png"
+            # fig_path = os.path.join(vis_path, fig_name)
+            # # Denormalise Images
+            # x = features.detach().cpu().numpy()
+            # y = y_tst.detach().cpu().numpy()
+            # x = denormalize(x).astype(np.uint8)
+            # # And visualise
+            # visualise_data(x[:25], y[:25], save_path=fig_path, title=fig_name[:-4], n_rows=5, n_cols=5)
+            # print(2/0)  # break execution - only need one batch to check
+
+            for j, block in enumerate(clsf_blocks):
+                if j != len(clsf_blocks) - 1:
                     features = block(features)
                 else:
                     output = block(features)
@@ -302,6 +361,126 @@ def test_modules(experiment, data_root, ckpt_path, save_path, total_n_classes, b
         pickle.dump(corruption_losses, f)
 
 
+def test_autoencoders(experiment, data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers, pin_mem, dev,
+                 check_if_run, total_processes, process):
+    """
+    Get the specific checkpoint trained on all corruptions and test on every composition
+
+    Parallelise by testing different compositions in different processes
+    """
+    files = os.listdir(ckpt_path)
+    for f in files:
+        if "es_" == f[:3]:
+            raise ValueError("Early stopping ckpt found {}. Training hasn't finished yet".format(f))
+    files = [f for f in files if f.split('_')[0] == experiment]
+
+    ae_ckpts = [f for f in files if len(f.split('-')) == 2]
+    ae_corrs = list(set([f.split('_')[-1][:-3] for f in ae_ckpts]))
+    ae_corrs.sort()
+    assert len(ae_corrs) == 6  # hardcoded for EMNIST5. Encoder and Decoder.
+
+    # Load the ckpt
+    if check_if_run and os.path.exists(os.path.join(save_path, "{}_all_losses_process_{}_of_{}.pkl".format(
+                                                    experiment + "IdentityClassifier", process, total_processes))):
+        raise RuntimeError("Pickle file already exists at {}. \n Skipping testing.".format(
+            os.path.join(save_path, "{}_all_losses_process_{}_of_{}.pkl".format(experiment, process, total_processes))))
+    else:
+        # Load the autoencoders
+        ae_blocks = []
+        ae_block_ckpt_names = []
+        for corr in ae_corrs:
+            blocks, block_ckpt_names = create_emnist_autoencoder(experiment, corr.split('-'), dev)
+            ae_blocks.append(blocks)
+            ae_block_ckpt_names.append(block_ckpt_names)
+        for blocks, block_ckpt_names in zip(ae_blocks, ae_block_ckpt_names):
+            for block, block_ckpt_name in zip(blocks, block_ckpt_names):
+                block.load_state_dict(torch.load(os.path.join(ckpt_path, block_ckpt_name)))
+                print("Loaded {}".format(block_ckpt_name))
+                print("From {}".format(os.path.join(ckpt_path, block_ckpt_name)))
+                sys.stdout.flush()
+
+        # Load the identity trained classifier
+        id_clsf_blocks, id_clsf_block_ckpt_names = create_emnist_network(total_n_classes, experiment + "Classifier",
+                                                                         ["Identity"], dev)
+        for block, block_ckpt_name in zip(id_clsf_blocks, id_clsf_block_ckpt_names):
+            block.load_state_dict(torch.load(os.path.join(ckpt_path, block_ckpt_name)))
+            print("Loaded {}".format(block_ckpt_name))
+            print("From {}".format(os.path.join(ckpt_path, block_ckpt_name)))
+
+        # Load the classifier trained on autoencoder outputs
+        all_clsf_blocks, all_clsf_block_ckpt_names = create_emnist_network(total_n_classes, experiment + "Classifier",
+                                                        [corr.split('-')[0] for corr in ae_corrs] + ["Identity"], dev)
+        for block, block_ckpt_name in zip(all_clsf_blocks, all_clsf_block_ckpt_names):
+            block.load_state_dict(torch.load(os.path.join(ckpt_path, block_ckpt_name)))
+            print("Loaded {}".format(block_ckpt_name))
+            print("From {}".format(os.path.join(ckpt_path, block_ckpt_name)))
+
+    # Test the model on all compositions
+    id_clsf_corruption_accs = {}
+    id_clsf_corruption_losses = {}
+    all_clsf_corruption_accs = {}
+    all_clsf_corruption_losses = {}
+
+    corruptions = os.listdir(data_root)
+    corruptions = [c for c in corruptions if c != "raw" and c != "corruption_names.pkl"]
+    corruptions.sort()
+    assert len(corruptions) == 167  # hardcoded for EMNIST. 149 EMNIST4. 167 EMNIST5.
+    assert total_processes <= len(corruptions)
+    assert process < total_processes
+
+    corruptions_per_process = len(corruptions) // total_processes
+    if process == total_processes - 1:
+        corruptions = corruptions[corruptions_per_process * process:]
+    else:
+        corruptions = corruptions[corruptions_per_process * process:corruptions_per_process * (process + 1)]
+
+    for test_corruption in corruptions:
+        print("Testing on {}".format(test_corruption))
+        sys.stdout.flush()
+        corruption_path = os.path.join(data_root, test_corruption)
+        trained_classes = list(range(total_n_classes))
+        # Shuffle=False should give identical results for symmetric shifts
+        _, _, tst_dl = get_static_emnist_dataloaders(corruption_path, trained_classes, batch_size, False,
+                                                     n_workers, pin_mem)
+
+        test_ae_blocks = []
+        for c in test_corruption.split('-'):
+            if c == "Identity":
+                continue
+            else:
+                for blocks, block_ckpt_names in zip(ae_blocks, ae_block_ckpt_names):
+                    if c in block_ckpt_names[0]:
+                        print("Selected autoencoder {}".format(block_ckpt_names))
+                        test_ae_blocks.append(blocks)
+
+        tst_loss, tst_acc = autoencoders_loss_and_accuracy(test_ae_blocks, id_clsf_blocks, tst_dl, dev)
+        id_clsf_corruption_accs[test_corruption] = tst_acc
+        id_clsf_corruption_losses[test_corruption] = tst_loss
+        print("{} Identity Classifier, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment, test_corruption,
+                                                                                       tst_loss, tst_acc))
+        sys.stdout.flush()
+
+        tst_loss, tst_acc = autoencoders_loss_and_accuracy(test_ae_blocks, all_clsf_blocks, tst_dl, dev)
+        all_clsf_corruption_accs[test_corruption] = tst_acc
+        all_clsf_corruption_losses[test_corruption] = tst_loss
+        print("{} Joint Classifier, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment, test_corruption,
+                                                                                       tst_loss, tst_acc))
+        sys.stdout.flush()
+
+    # Save the results
+    with open(os.path.join(save_path, "{}_all_accs_process_{}_of_{}.pkl".format(experiment + "IdentityClassifier",
+                                                                                process, total_processes)), "wb") as f:
+        pickle.dump(id_clsf_corruption_accs, f)
+    with open(os.path.join(save_path, "{}_all_losses_process_{}_of_{}.pkl".format(experiment + "IdentityClassifier",
+                                                                                  process, total_processes)), "wb") as f:
+        pickle.dump(id_clsf_corruption_losses, f)
+    with open(os.path.join(save_path, "{}_all_accs_process_{}_of_{}.pkl".format(experiment + "JointClassifier",
+                                                                                process, total_processes)), "wb") as f:
+        pickle.dump(all_clsf_corruption_accs, f)
+    with open(os.path.join(save_path, "{}_all_losses_process_{}_of_{}.pkl".format(experiment + "JointClassifier",
+                                                                                  process, total_processes)), "wb") as f:
+        pickle.dump(all_clsf_corruption_losses, f)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Args to test networks on all corruptions in a given directory.')
     parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST5/',
@@ -350,8 +529,13 @@ if __name__ == "__main__":
     """
 
     if "Modules" in args.experiment:
-        test_modules(args.experiment, args.data_root, args.ckpt_path, args.save_path, args.total_n_classes, args.batch_size,
-                     args.n_workers, args.pin_mem, dev, args.check_if_run, args.num_processes, args.process)
+        test_modules(args.experiment, args.data_root, args.ckpt_path, args.save_path, args.total_n_classes,
+                     args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run, args.num_processes,
+                     args.process)
+    elif "ImgSpace" in args.experiment:
+        test_autoencoders(args.experiment, args.data_root, args.ckpt_path, args.save_path, args.total_n_classes,
+                          args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run, args.num_processes,
+                          args.process)
     elif args.test_all:
         test_all(args.experiment, args.data_root, args.ckpt_path, args.save_path, args.total_n_classes, args.batch_size,
                  args.n_workers, args.pin_mem, dev, args.check_if_run, args.num_processes, args.process)

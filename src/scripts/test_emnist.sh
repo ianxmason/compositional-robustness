@@ -40,7 +40,7 @@ do
               python test_emnist.py --pin-mem \
                                     --check-if-run \
                                     --test-all \
-                                    --experiment "AutoModulesV3" \
+                                    --experiment "ImgSpaceV2" \
                                     --num-processes $(($SLURM_ARRAY_TASK_COUNT * $jobs_per_gpu)) \
                                     --process $(($SLURM_ARRAY_TASK_ID * $jobs_per_gpu + $number)) &
 done

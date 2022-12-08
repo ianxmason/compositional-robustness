@@ -393,3 +393,39 @@ def create_emnist_modules(experiment, corruption_names, dev):
 
     assert len(module_ckpt_names) == len(modules)
     return modules, module_ckpt_names
+
+
+def create_emnist_autoencoder(experiment, corruption_names, dev):
+    network_blocks = []
+    network_block_ckpt_names = []
+
+    network_blocks.append(
+        nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=5, stride=2, padding=2),
+            nn.Dropout2d(0.1),
+            nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.Conv2d(128, 256, kernel_size=5, stride=2, padding=2),
+            nn.Dropout2d(0.5),
+            nn.ReLU()
+        ).to(dev)
+    )
+    network_block_ckpt_names.append("{}_Encoder_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(
+        nn.Sequential(
+            nn.ConvTranspose2d(256, 128, kernel_size=5, stride=2, padding=2),
+            nn.Dropout2d(0.5),
+            nn.ReLU(),
+            nn.ConvTranspose2d(128, 64, kernel_size=5, stride=2, padding=2, output_padding=1),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 3, kernel_size=5, stride=2, padding=2, output_padding=1),
+            nn.Tanh()  # normalized data is in range [-1, 1]
+        ).to(dev)
+    )
+    network_block_ckpt_names.append("{}_Decoder_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    assert len(network_block_ckpt_names) == len(network_blocks)
+    return network_blocks, network_block_ckpt_names
