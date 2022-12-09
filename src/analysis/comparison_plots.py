@@ -143,8 +143,8 @@ def main(elemental_corruptions, experiments, results_path, save_path):
         axs.text(i - 1 + 0.0, 95, counts[1], c='orange', horizontalalignment='center')
         axs.text(i - 1 + 0.3, 95, counts[2], c='g', horizontalalignment='center')
 
-    plt.savefig(os.path.join(save_path, "comparison-boxplot.pdf".format(experiment)), bbox_inches="tight")
-    print("Saved boxplot to {}".format(os.path.join(save_path, "comparison-boxplot.pdf".format(experiment))))
+    plt.savefig(os.path.join(save_path, "comparison-boxplot.pdf"), bbox_inches="tight")
+    print("Saved boxplot to {}".format(os.path.join(save_path, "comparison-boxplot.pdf")))
 
 
     # Violinplot
@@ -165,8 +165,8 @@ def main(elemental_corruptions, experiments, results_path, save_path):
         axs.text(i - 1 + 0.0, 95, counts[1], c='orange', horizontalalignment='center')
         axs.text(i - 1 + 0.3, 95, counts[2], c='g', horizontalalignment='center')
 
-    plt.savefig(os.path.join(save_path, "comparison-violins.pdf".format(experiment)), bbox_inches="tight")
-    print("Saved violinplot to {}".format(os.path.join(save_path, "comparison-violins.pdf".format(experiment))))
+    plt.savefig(os.path.join(save_path, "comparison-violins.pdf"), bbox_inches="tight")
+    print("Saved violinplot to {}".format(os.path.join(save_path, "comparison-violins.pdf")))
 
 
 
@@ -210,11 +210,16 @@ if __name__ == "__main__":
     #                "ModulesV2", "ModulesV3", "ModulesV3NoPassThrough", "ModulesV3NoInvariance",
     #                "AutoModulesV2", "AutoModulesV3"]
 
+    # With img space
+    # experiments = ["CrossEntropyV2",
+    #                "ContrastiveL5W01",
+    #                "ModulesV2", "AutoModulesV2",
+    #                "ImgSpaceV2IdentityClassifier", "ImgSpaceV2JointClassifier"]
 
+    # Highlighting only the best modules
     experiments = ["CrossEntropyV2",
                    "ContrastiveL5W01",
-                   "ModulesV2", "AutoModulesV2",
-                   "ImgSpaceV2IdentityClassifier", "ImgSpaceV2JointClassifier"]
+                   "AutoModulesV2"]
 
     # Set seeding
     reset_rngs(seed=1357911, deterministic=True)

@@ -615,9 +615,9 @@ def find_contrastive_abstraction_level(corruption_names, trn_dls, val_dls, lr, c
     return abstraction_levels
 
 
-def find_module_abstraction_level(network_blocks, trn_dls, val_dls, lr, cross_entropy_loss, accuracy_fn,
-                                  contrastive_loss, weights, single_corr_bs, dev, pass_through, num_iterations=50,
-                                  num_repeats=5):
+def find_module_abstraction_level(network_blocks, trn_dls, val_dls, logging_path, corruption_names, lr,
+                                  cross_entropy_loss, accuracy_fn, contrastive_loss, weights, single_corr_bs, dev,
+                                  pass_through, num_iterations=50, num_repeats=5):
     """
     Tries training the network with modules at every level of abstraction. Trains for num_iterations update steps.
     Repeats the experiment num_repeats times. Returns the level of abstraction that gives the best mean performance.
@@ -627,11 +627,13 @@ def find_module_abstraction_level(network_blocks, trn_dls, val_dls, lr, cross_en
     Optional ToDo: Throw a warning if means are close to each other (within 1 std).
     """
     val_accs = {}
+    train_accs = {}  # For plotting learning curves over num_iterations
     for n in range(num_repeats):
         temp_modules, _ = create_emnist_modules("temp", "temp", dev)
         val_accs[n] = []
         for i, module in enumerate(temp_modules):
             print("Abstraction Level {}".format(i))
+            train_accs["Level-{}_Repeat-{}".format(i, n)] = []
             temp_optim = torch.optim.Adam(module.parameters(), lr)
 
             module_ce_loss = 0.0
@@ -653,6 +655,7 @@ def find_module_abstraction_level(network_blocks, trn_dls, val_dls, lr, cross_en
                 module_acc += acc
                 loss.backward()
                 temp_optim.step()
+                train_accs["Level-{}_Repeat-{}".format(i, n)].append(acc)
 
                 if j >= num_iterations:
                     print("Trained for {} batches.".format(j))
@@ -696,6 +699,10 @@ def find_module_abstraction_level(network_blocks, trn_dls, val_dls, lr, cross_en
             print("Validation accuracy {:6.3f}".format(module_valid_acc / denominator))
             val_accs[n].append(module_valid_acc / denominator)
 
+    # Pickle train accs for plotting
+    with open(os.path.join(logging_path, "module_train_accs_{}.pkl".format(corruption_names[0])), "wb") as f:
+        pickle.dump(train_accs, f)
+
     mean_val_accs = []
     for i in range(len(val_accs[0])):
         mean_val_accs.append(np.mean([val_accs[n][i] for n in range(num_repeats)]))
@@ -738,7 +745,7 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
                     raise ValueError("Initial module training only uses single corruptions (plus the identity)")
 
                 # Load identity network or create it if it doesn't exist
-                network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, "ModulesV3",
+                network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, "Modules",
                                                                                  ["Identity"], dev)
                 assert len(network_blocks) >= 2  # assumed when the network is called
                 assert len(weights) == len(network_blocks)  # one module before each layer (including image space)
@@ -826,9 +833,10 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
                 pass_through = True
             if "Auto" in experiment:
                 logger.info("Choosing Level of Abstraction")
-                module_level = find_module_abstraction_level(network_blocks, trn_dls, val_dls, lr, cross_entropy_loss,
-                                                             accuracy_fn, contrastive_loss, weights, single_corr_bs,
-                                                             dev, pass_through)
+                module_level = find_module_abstraction_level(network_blocks, trn_dls, val_dls, logging_path,
+                                                             corruption_names, lr, cross_entropy_loss, accuracy_fn,
+                                                             contrastive_loss, weights, single_corr_bs, dev,
+                                                             pass_through)
                 logger.info("Selected Best Level of Abstraction {}".format(module_level))
             else:
                 logger.info("Manually Defined Level of Abstraction")
@@ -1109,7 +1117,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Set seeding
-    reset_rngs(seed=246810, deterministic=True)
+    reset_rngs(seed=1357911, deterministic=True)
+    # reset_rngs(seed=246810, deterministic=True)
 
     # Set device
     if args.cpu:
