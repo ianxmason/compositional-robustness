@@ -167,6 +167,7 @@ class Rotate90(Corruption):
         return True
 
     def __call__(self, x):
+        x = np.array(x) / 255.
         angle = math.pi / 2.
         # Todo: why is the center e.g. 13.5 rather than 14 for 28x28 image? (Guess is to do with zero-indexing)
         center = ((x.shape[0] / 2) - 0.5, (x.shape[1] / 2) - 0.5)
@@ -179,67 +180,9 @@ class Rotate90(Corruption):
         b3 = center[1] * (1 - b1 - b2)
         aff = transform.AffineTransform(rotation=angle, translation=[a3, b3])
 
-        x = np.array(x) / 255.
         x = transform.warp(x, inverse_map=aff)
         x = np.clip(x, 0, 1) * 255
         return x.astype(np.float32)
-
-
-class Rotate180(Corruption):
-    def __init__(self):
-        pass
-
-    @property
-    def name(self):
-        return 'Rotate180'
-
-    @property
-    def abbreviation(self):
-        return 'R180'
-
-    @property
-    def lossless(self):
-        return True
-
-    def __call__(self, x):
-        angle = math.pi
-        # Todo: why is the center e.g. 13.5 rather than 14 for 28x28 image? (Guess is to do with zero-indexing)
-        center = ((x.shape[0] / 2) - 0.5, (x.shape[1] / 2) - 0.5)
-
-        aff = transform.AffineTransform(rotation=angle)
-
-        a1, a2 = aff.params[0, :2]
-        b1, b2 = aff.params[1, :2]
-        a3 = center[0] * (1 - a1 - a2)
-        b3 = center[1] * (1 - b1 - b2)
-        aff = transform.AffineTransform(rotation=angle, translation=[a3, b3])
-
-        x = np.array(x) / 255.
-        x = transform.warp(x, inverse_map=aff)
-        x = np.clip(x, 0, 1) * 255
-        return x.astype(np.float32)
-
-
-class Mirror(Corruption):
-    def __init__(self):
-        pass
-
-    @property
-    def name(self):
-        return 'Mirror'
-
-    @property
-    def abbreviation(self):
-        return 'MI'
-
-    @property
-    def lossless(self):
-        return True
-
-    def __call__(self, x):
-        x = np.array(x).astype(np.float32)
-        # Todo: assumes black and white (i.e. 2D) image array.
-        return x[:, ::-1]
 
 
 class Contrast(Corruption):

@@ -6,9 +6,10 @@ import os
 import sys
 import torch
 import torch.nn as nn
+import torchvision
 import pickle
-from data.data_transforms import denormalize
-from data.data_loaders import get_static_emnist_dataloaders
+import data.data_transforms as dt
+from data.data_loaders import get_static_emnist_dataloaders, get_transformed_static_emnist_dataloaders
 from lib.networks import create_emnist_network, create_emnist_modules, create_emnist_autoencoder
 from lib.utils import *
 from lib.equivariant_hooks import *
@@ -185,12 +186,21 @@ def test_specific(experiment, data_root, ckpt_path, save_path, total_n_classes, 
 
             print("Testing {} on composition {}".format(ckpt, test_corruption))
             sys.stdout.flush()
-
-            corruption_path = os.path.join(data_root, test_corruption)
             trained_classes = list(range(total_n_classes))
-            # Shuffle=False should give identical results for symmetric shifts
-            _, _, tst_dl = get_static_emnist_dataloaders(corruption_path, trained_classes, batch_size, False,
-                                                         n_workers, pin_mem)
+
+            # Old Version
+            # corruption_path = os.path.join(data_root, test_corruption)
+            # _, _, tst_dl = get_static_emnist_dataloaders(corruption_path, trained_classes, batch_size, False,
+            #                                              n_workers, pin_mem)
+
+            identity_path = os.path.join(data_root, "Identity")
+            transforms = [torchvision.transforms.Lambda(lambda im: im.convert('L'))]
+            transforms += [getattr(dt, c)() for c in test_corruption.split('-')]
+            transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='L'))]
+            transforms += [torchvision.transforms.Lambda(lambda im: im.convert('RGB'))]
+            _, _, tst_dl = get_transformed_static_emnist_dataloaders(identity_path, transforms, trained_classes,
+                                                                     batch_size, False, n_workers, pin_mem)
+
             tst_loss, tst_acc = loss_and_accuracy(network_blocks, tst_dl, dev)
             corruption_accs[test_corruption] = tst_acc
             corruption_losses[test_corruption] = tst_loss
@@ -251,11 +261,21 @@ def test_all(experiment, data_root, ckpt_path, save_path, total_n_classes, batch
     for test_corruption in corruptions:
         print("Testing {} on {}".format(ckpt, test_corruption))
         sys.stdout.flush()
-        corruption_path = os.path.join(data_root, test_corruption)
         trained_classes = list(range(total_n_classes))
-        # Shuffle=False should give identical results for symmetric shifts
-        _, _, tst_dl = get_static_emnist_dataloaders(corruption_path, trained_classes, batch_size, False,
-                                                     n_workers, pin_mem)
+
+        # Old Version
+        # corruption_path = os.path.join(data_root, test_corruption)
+        # _, _, tst_dl = get_static_emnist_dataloaders(corruption_path, trained_classes, batch_size, False,
+        #                                              n_workers, pin_mem)
+
+        identity_path = os.path.join(data_root, "Identity")
+        transforms = [torchvision.transforms.Lambda(lambda im: im.convert('L'))]
+        transforms += [getattr(dt, c)() for c in test_corruption.split('-')]
+        transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='L'))]
+        transforms += [torchvision.transforms.Lambda(lambda im: im.convert('RGB'))]
+        _, _, tst_dl = get_transformed_static_emnist_dataloaders(identity_path, transforms, trained_classes, batch_size,
+                                                                 False, n_workers, pin_mem)
+
         tst_loss, tst_acc = loss_and_accuracy(network_blocks, tst_dl, dev)
         corruption_accs[test_corruption] = tst_acc
         corruption_losses[test_corruption] = tst_loss
@@ -291,7 +311,7 @@ def test_modules(experiment, data_root, ckpt_path, save_path, total_n_classes, b
         raise RuntimeError("Pickle file already exists at {}. \n Skipping testing.".format(
             os.path.join(save_path, "{}_all_losses_process_{}_of_{}.pkl".format(experiment, process, total_processes))))
     else:
-        network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, "ModulesV3",
+        network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, "Modules",
                                                                          ["Identity"], dev)
         for block, block_ckpt_name in zip(network_blocks, network_block_ckpt_names):
             block.load_state_dict(torch.load(os.path.join(ckpt_path, block_ckpt_name)))
@@ -331,11 +351,45 @@ def test_modules(experiment, data_root, ckpt_path, save_path, total_n_classes, b
     for test_corruption in corruptions:
         print("Testing on {}".format(test_corruption))
         sys.stdout.flush()
-        corruption_path = os.path.join(data_root, test_corruption)
         trained_classes = list(range(total_n_classes))
-        # Shuffle=False should give identical results for symmetric shifts
-        _, _, tst_dl = get_static_emnist_dataloaders(corruption_path, trained_classes, batch_size, False,
-                                                     n_workers, pin_mem)
+
+        # Old Version
+        # corruption_path = os.path.join(data_root, test_corruption)
+        # _, _, tst_dl = get_static_emnist_dataloaders(corruption_path, trained_classes, batch_size, False,
+        #                                              n_workers, pin_mem)
+
+        # Todo: will need to check again the visualisation with RGB images as we use mode 'L' for grayscale for EMNIST
+        # vis_path = '/om2/user/imason/compositions/figs/EMNIST_TEMP/'
+        # x, y = next(iter(tst_dl))
+        # fig_name = "{}_old.png".format(test_corruption)
+        # fig_path = os.path.join(vis_path, fig_name)
+        # # Denormalise Images
+        # x = x.detach().cpu().numpy()
+        # y = y.detach().cpu().numpy()
+        # x = dt.denormalize(x).astype(np.uint8)
+        # # And visualise
+        # visualise_data(x[:25], y[:25], save_path=fig_path, title=fig_name[:-4], n_rows=5, n_cols=5)
+
+        identity_path = os.path.join(data_root, "Identity")
+        transforms = [torchvision.transforms.Lambda(lambda im: im.convert('L'))]
+        transforms += [getattr(dt, c)() for c in test_corruption.split('-')]
+        transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='L'))]
+        transforms += [torchvision.transforms.Lambda(lambda im: im.convert('RGB'))]
+        _, _, tst_dl = get_transformed_static_emnist_dataloaders(identity_path, transforms, trained_classes, batch_size,
+                                                                 False, n_workers, pin_mem)
+
+        # Todo: will need to check again the visualisation with RGB images as we use mode 'L' for grayscale for EMNIST
+        # vis_path = '/om2/user/imason/compositions/figs/EMNIST_TEMP/'
+        # x, y = next(iter(tst_dl))
+        # fig_name = "{}_new.png".format(test_corruption)
+        # fig_path = os.path.join(vis_path, fig_name)
+        # # Denormalise Images
+        # x = x.detach().cpu().numpy()
+        # y = y.detach().cpu().numpy()
+        # x = dt.denormalize(x).astype(np.uint8)
+        # # And visualise
+        # visualise_data(x[:25], y[:25], save_path=fig_path, title=fig_name[:-4], n_rows=5, n_cols=5)
+
         test_modules = []
         test_module_levels = []
         for c in test_corruption.split('-'):
@@ -437,11 +491,20 @@ def test_autoencoders(experiment, data_root, ckpt_path, save_path, total_n_class
     for test_corruption in corruptions:
         print("Testing on {}".format(test_corruption))
         sys.stdout.flush()
-        corruption_path = os.path.join(data_root, test_corruption)
         trained_classes = list(range(total_n_classes))
-        # Shuffle=False should give identical results for symmetric shifts
-        _, _, tst_dl = get_static_emnist_dataloaders(corruption_path, trained_classes, batch_size, False,
-                                                     n_workers, pin_mem)
+
+        # Old Version
+        # corruption_path = os.path.join(data_root, test_corruption)
+        # _, _, tst_dl = get_static_emnist_dataloaders(corruption_path, trained_classes, batch_size, False,
+        #                                              n_workers, pin_mem)
+
+        identity_path = os.path.join(data_root, "Identity")
+        transforms = [torchvision.transforms.Lambda(lambda im: im.convert('L'))]
+        transforms += [getattr(dt, c)() for c in test_corruption.split('-')]
+        transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='L'))]
+        transforms += [torchvision.transforms.Lambda(lambda im: im.convert('RGB'))]
+        _, _, tst_dl = get_transformed_static_emnist_dataloaders(identity_path, transforms, trained_classes, batch_size,
+                                                                 False, n_workers, pin_mem)
 
         test_ae_blocks = []
         for c in test_corruption.split('-'):

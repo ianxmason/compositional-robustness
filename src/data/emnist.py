@@ -22,96 +22,6 @@ import data.data_transforms as dt
 from lib.utils import mkdir_p
 
 
-class DynamicEMNIST(EMNIST):
-    """
-    Load entire dataset into RAM as torch tensors.
-    Just like standard EMNIST dataset, but with the option of normalizing / adding colour channels directly
-    to torch tensors, rather than via PIL images (slower).
-    Pros:
-        Avoid per image operations like:
-            - casting to and from PIL images
-            - normalization
-            - converting to colour array
-    Cons:
-        Inconsistent transforms -- no longer act on a PIL Image, but rather a tensor.
-    """
-    def __init__(self, root, split="balanced", norm=True, color=True, which_set="train", keep_classes=None,
-                 **kwargs):
-        assert which_set in ['train', 'valid', 'test'], (
-            'Expected split to be either train, valid or eval. '
-            'Got {0}'.format(which_set)
-        )
-        self.keep_classes = keep_classes
-        self.norm = norm
-        self.color = color
-        self.which_set = which_set
-        self.train = (self.which_set in ["train", "valid"])
-        super(DynamicEMNIST, self).__init__(root=root, split=split, train=self.train, **kwargs)
-        self._prep_set()
-        self._norm_data()
-        self._color_channels()
-
-    @property
-    def raw_folder(self):    # datasets/EMNIST/processed/...
-        return os.path.join(self.root, "EMNIST", 'raw')
-
-    @property
-    def processed_folder(self):
-        return os.path.join(self.root, "EMNIST", 'processed')
-
-    def _norm_data(self):
-        if self.norm:
-            self.data = self.data.type(torch.FloatTensor) * float(2. / 255.) - 1.  # (0, 255) --> (-1, 1)
-
-    def _color_channels(self):
-        if self.color:
-            self.data = torch.stack([self.data, self.data, self.data], dim=1)
-
-    def _prep_set(self):
-        if self.train:
-            tr_data, val_data = _train_val_split(*_get_sorted_data(self))
-            tr_data = self._filter_labels(tr_data, self.keep_classes)
-            val_data = self._filter_labels(val_data, self.keep_classes)
-            if self.which_set == "train":
-                self.data = torch.from_numpy(tr_data[0])
-                self.targets = torch.from_numpy(tr_data[1])
-            else:    # split == "valid"
-                self.data = torch.from_numpy(val_data[0])
-                self.targets = torch.from_numpy(val_data[1])
-        else:
-            d, t = _get_sorted_data(self)    # used for consistency -- transpose and sorting done in this fn.
-            d, t = self._filter_labels((d, t), self.keep_classes)
-            self.data = torch.from_numpy(d)
-            self.targets = torch.from_numpy(t)
-
-    @staticmethod
-    def _filter_labels(data, keep_classes):
-        d, t = data
-        if keep_classes is not None:
-            keep_inds = np.isin(t, np.array(keep_classes))
-            d = d[keep_inds]
-            t = t[keep_inds]
-        return d, t
-
-    def __getitem__(self, index):
-        """
-        Args:
-            index (int): Index
-
-        Returns:
-            tuple: (image, target) where target is index of the target class.
-        """
-        img, target = self.data[index], int(self.targets[index])
-
-        if self.transform is not None:
-            img = self.transform(img)
-
-        if self.target_transform is not None:
-            target = self.target_transform(target)
-
-        return img, target
-
-
 class StaticEMNIST(ImageFolder):
     """
     Load batches of images and targets from disk, grouped by class.
@@ -163,25 +73,6 @@ class StaticEMNIST(ImageFolder):
 
     def __len__(self):
         return len(self.imgs)
-
-
-class StaticEMNIST_Idx(StaticEMNIST):
-    def __getitem__(self, index):  # Overwrite DatasetFolder getitem
-        """
-        Args:
-            index (int): Index
-
-        Returns:
-            tuple: (sample, target) where target is class_index of the target class.
-        """
-        path, target = self.samples[index]
-        sample = self.loader(path)
-        if self.transform is not None:
-            sample = self.transform(sample)
-        if self.target_transform is not None:
-            target = self.target_transform(target)
-
-        return sample, target, index
 
 
 def _get_emnist_datasets(root_dir, as_datasets=False, transform=None, norm=False, color=False):
@@ -307,7 +198,7 @@ if __name__ == "__main__":
 
     # PATHS
     root_dir = "/om2/user/imason/compositions/datasets/"
-    output_dir = os.path.join(root_dir, "EMNIST5/")
+    output_dir = os.path.join(root_dir, "EMNIST_TEMP/")
 
 
     if create_datasets:
@@ -333,7 +224,3 @@ if __name__ == "__main__":
             # Create datasets
             _create_emnist_target_datasets(sorted_imgs, sorted_labels, corruption_fns, corruption_names,
                                            corruption_paths)
-
-
-
-
