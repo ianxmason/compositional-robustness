@@ -1,204 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
-
-
-# DTN network from https://github.com/thuml/CDAN/blob/master/pytorch/network.py
-# The code is associated with https://arxiv.org/pdf/1705.10667.pdf
-class DTN(nn.Module):
-    def __init__(self, n_classes):
-        super(DTN, self).__init__()
-        # Todo: (maybe/opt) - set num filters, batch norm size etc. dynamically based on number of corruptions/equivariant
-        # hooks. Atm is all done manually - e.g. set first layer to 32 to use one hook, then batch norm 64 afterwards etc.
-        self.conv_params = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=5, stride=2, padding=2),
-            nn.BatchNorm2d(64),
-            nn.Dropout2d(0.1),
-            nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2),
-            nn.BatchNorm2d(128),
-            nn.Dropout2d(0.3),
-            nn.ReLU(),
-            nn.Conv2d(128, 256, kernel_size=5, stride=2, padding=2),
-            nn.BatchNorm2d(256),
-            nn.Dropout2d(0.5),
-            nn.ReLU()
-        )
-
-        self.fc_params = nn.Sequential(
-            nn.Linear(256 * 4 * 4, 512),
-            nn.BatchNorm1d(512),
-            nn.ReLU(),
-            nn.Dropout(p=0.5)
-        )
-
-        self.classifier = nn.Linear(512, n_classes)
-
-    def forward(self, x):
-        x = self.conv_params(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc_params(x)
-        y = self.classifier(x)
-        return y
-
-
-# Todo: if eqv filters continues - make this more flexible so can set number of filters to train and number
-#       of equivariant_hooks to use.
-class DTN_half(nn.Module):
-    def __init__(self, n_classes):
-        super(DTN_half, self).__init__()
-        self.conv_params = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=5, stride=2, padding=2),
-            nn.BatchNorm2d(64),
-            nn.Dropout2d(0.1),
-            nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2),
-            nn.BatchNorm2d(128),
-            nn.Dropout2d(0.3),
-            nn.ReLU(),
-            nn.Conv2d(128, 256, kernel_size=5, stride=2, padding=2),
-            nn.BatchNorm2d(256),
-            nn.Dropout2d(0.5),
-            nn.ReLU()
-        )
-
-        self.fc_params = nn.Sequential(
-            nn.Linear(256 * 4 * 4, 512),
-            nn.BatchNorm1d(512),
-            nn.ReLU(),
-            nn.Dropout(p=0.5)
-        )
-
-        self.classifier = nn.Linear(512, n_classes)
-
-    def forward(self, x):
-        x = self.conv_params(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc_params(x)
-        y = self.classifier(x)
-        return y
-
-
-class DTN_Part_One(nn.Module):
-    def __init__(self):
-        super(DTN_Part_One, self).__init__()
-        # Todo: (maybe/opt) - set num filters, batch norm size etc. dynamically based on number of corruptions/equivariant
-        # hooks. Atm is all done manually - e.g. set first layer to 32 to use one hook, then batch norm 64 afterwards etc.
-        self.conv_params = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=5, stride=2, padding=2),
-            nn.BatchNorm2d(64),
-            nn.Dropout2d(0.1),
-            nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2),
-            nn.BatchNorm2d(128),
-            nn.Dropout2d(0.3),
-            nn.ReLU()
-        )
-
-    def forward(self, x):
-        y = self.conv_params(x)
-        return y
-
-
-class DTN_Part_Two(nn.Module):
-    def __init__(self, n_classes):
-        super(DTN_Part_Two, self).__init__()
-        # Todo: (maybe/opt) - set num filters, batch norm size etc. dynamically based on number of corruptions/equivariant
-        # hooks. Atm is all done manually - e.g. set first layer to 32 to use one hook, then batch norm 64 afterwards etc.
-        self.conv_params = nn.Sequential(
-            # nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2),
-            # nn.BatchNorm2d(128),
-            # nn.Dropout2d(0.3),
-            # nn.ReLU(),
-            nn.Conv2d(128, 256, kernel_size=5, stride=2, padding=2),
-            nn.BatchNorm2d(256),
-            nn.Dropout2d(0.5),
-            nn.ReLU()
-        )
-
-        self.fc_params = nn.Sequential(
-            nn.Linear(256 * 4 * 4, 512),
-            nn.BatchNorm1d(512),
-            nn.ReLU(),
-            nn.Dropout(p=0.5)
-        )
-
-        self.classifier = nn.Linear(512, n_classes)
-
-    def forward(self, x):
-        x = self.conv_params(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc_params(x)
-        y = self.classifier(x)
-        return y
-
-
-class Filter_Bank(nn.Module):
-    def __init__(self):
-        super(Filter_Bank, self).__init__()
-        # Todo: (maybe/opt) - set num filters, batch norm size etc. dynamically based on number of corruptions/equivariant
-        # hooks. Atm is all done manually - e.g. set first layer to 32 to use one hook, then batch norm 64 afterwards etc.
-        self.conv_params = nn.Sequential(
-            # nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
-            # nn.BatchNorm2d(64),
-            # nn.Dropout2d(0.3),
-            # nn.ReLU(),
-            # nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
-            # nn.BatchNorm2d(64),
-            # nn.Dropout2d(0.3),
-            # nn.ReLU()
-
-            nn.Conv2d(128, 128, kernel_size=5, stride=1, padding=2),
-            nn.BatchNorm2d(128),
-            nn.Dropout2d(0.3),
-            nn.ReLU(),
-            nn.Conv2d(128, 128, kernel_size=5, stride=1, padding=2),
-            nn.BatchNorm2d(128),
-            nn.Dropout2d(0.3),
-            nn.ReLU()
-        )
-
-    def forward(self, x):
-        y = self.conv_params(x)
-        return y
-
-
-class Filter_Bank_Before_Net(nn.Module):
-    def __init__(self):
-        super(Filter_Bank_Before_Net, self).__init__()
-        # Todo: optional - make this a mini autoencoder in terms of shape - eg. 3 channels -> 64 channels -> 3 channels
-        # Todo: use dropout, batch norm etc???
-        # Todo: combine the two filter bank set ups so we can just take shapes of layers as inpots
-        self.conv_params = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=5, stride=1, padding=2),
-            nn.BatchNorm2d(64),
-            nn.Dropout2d(0.1),
-            nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
-            nn.BatchNorm2d(64),
-            nn.Dropout2d(0.3),
-            nn.ReLU(),
-            nn.Conv2d(64, 3, kernel_size=5, stride=1, padding=2),
-            nn.BatchNorm2d(3),
-            nn.Dropout2d(0.1),
-            nn.ReLU()
-        )
-
-    def forward(self, x):
-        y = self.conv_params(x)
-        return y
-
-
-class Filter_Bank_Resad(nn.Module):
-    def __init__(self):
-        super(Filter_Bank_Resad, self).__init__()
-        self.conv_params = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=5, stride=2, padding=2)
-        )
-
-    def forward(self, x):
-        y = self.conv_params(x)
-        return y
+from torchvision.models import resnet18, inception_v3
 
 
 class SimpleConvBlock(nn.Module):
@@ -429,3 +232,129 @@ def create_emnist_autoencoder(experiment, corruption_names, dev):
 
     assert len(network_block_ckpt_names) == len(network_blocks)
     return network_blocks, network_block_ckpt_names
+
+
+def create_cifar_network(total_n_classes, experiment, corruption_names, dev):
+    resnet = resnet18(pretrained=False)
+
+    network_blocks = []
+    network_block_ckpt_names = []
+
+    network_blocks.append(nn.Sequential(resnet.conv1, resnet.bn1, resnet.relu).to(dev))
+    network_block_ckpt_names.append("{}_ResnetBlock1_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(resnet.layer1[0].to(dev))
+    network_block_ckpt_names.append("{}_ResnetBlock2_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(resnet.layer1[1].to(dev))
+    network_block_ckpt_names.append("{}_ResnetBlock3_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(resnet.layer2[0].to(dev))
+    network_block_ckpt_names.append("{}_ResnetBlock4_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(resnet.layer2[1].to(dev))
+    network_block_ckpt_names.append("{}_ResnetBlock5_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(resnet.layer3[0].to(dev))
+    network_block_ckpt_names.append("{}_ResnetBlock6_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(resnet.layer3[1].to(dev))
+    network_block_ckpt_names.append("{}_ResnetBlock7_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(resnet.layer4[0].to(dev))
+    network_block_ckpt_names.append("{}_ResnetBlock8_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(nn.Sequential(resnet.layer4[1], resnet.avgpool).to(dev))
+    network_block_ckpt_names.append("{}_ResnetBlock9_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(nn.Sequential(nn.Flatten(), SimpleClassifier(512, total_n_classes)).to(dev))
+    network_block_ckpt_names.append("{}_ResnetClassifier_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    assert len(network_block_ckpt_names) == len(network_blocks)
+    return network_blocks, network_block_ckpt_names
+
+
+def create_cifar_modules(experiment, corruption_names, dev):
+    # Todo: check the shapes match with https://github.com/cianeastwood/bufr/blob/main/nets.py
+    # Todo: these shapes determine the shape of the modules (can I just use e.g. resnet.layer1[0] as a module?)
+    pass
+
+
+def create_cifar_autoencoder(experiment, corruption_names, dev):
+    pass
+
+
+def create_facescrub_network(total_n_classes, experiment, corruption_names, dev):
+    # https://stackoverflow.com/questions/57421842/image-size-of-256x256-not-299x299-fed-into-inception-v3-model-pytorch-and-wo
+    # we can use facescrub images of size 100x100 if we don't use aux_logits
+    # (no auxiliary classifier as in section 4 https://arxiv.org/pdf/1512.00567.pdf)
+    inception = inception_v3(pretrained=False)
+
+    network_blocks = []
+    network_block_ckpt_names = []
+
+    network_blocks.append(inception.Conv2d_1a_3x3.to(dev))
+    network_block_ckpt_names.append("{}_InceptionBlock1_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(inception.Conv2d_2a_3x3.to(dev))
+    network_block_ckpt_names.append("{}_InceptionBlock2_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(inception.Conv2d_2b_3x3.to(dev))
+    network_block_ckpt_names.append("{}_InceptionBlock3_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(nn.Sequential(inception.maxpool1, inception.Conv2d_3b_1x1).to(dev))
+    network_block_ckpt_names.append("{}_InceptionBlock4_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(inception.Conv2d_4a_3x3.to(dev))
+    network_block_ckpt_names.append("{}_InceptionBlock5_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(nn.Sequential(inception.maxpool2, inception.Mixed_5b).to(dev))
+    network_block_ckpt_names.append("{}_InceptionBlock6_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(inception.Mixed_5c.to(dev))
+    network_block_ckpt_names.append("{}_InceptionBlock7_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(inception.Mixed_5d.to(dev))
+    network_block_ckpt_names.append("{}_InceptionBlock8_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(inception.Mixed_6a.to(dev))
+    network_block_ckpt_names.append("{}_InceptionBlock9_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(inception.Mixed_6b.to(dev))
+    network_block_ckpt_names.append("{}_InceptionBlock10_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(inception.Mixed_6c.to(dev))
+    network_block_ckpt_names.append("{}_InceptionBlock11_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(inception.Mixed_6d.to(dev))
+    network_block_ckpt_names.append("{}_InceptionBlock12_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(inception.Mixed_6e.to(dev))
+    network_block_ckpt_names.append("{}_InceptionBlock13_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(inception.Mixed_7a.to(dev))
+    network_block_ckpt_names.append("{}_InceptionBlock14_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(inception.Mixed_7b.to(dev))
+    network_block_ckpt_names.append("{}_InceptionBlock15_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(nn.Sequential(inception.Mixed_7c, inception.avgpool).to(dev))
+    network_block_ckpt_names.append("{}_InceptionBlock16_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(nn.Sequential(nn.Flatten(), SimpleClassifier(2048, total_n_classes)).to(dev))
+    network_block_ckpt_names.append("{}_InceptionClassifier_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    assert len(network_block_ckpt_names) == len(network_blocks)
+    return network_blocks, network_block_ckpt_names
+
+
+def create_facescrub_modules(experiment, corruption_names, dev):
+    # Todo: check the shapes seem reasonable. Do match the pattern in inception.py (cmd click the definition of inception_v3)
+    # Todo: these shapes determine the shape of the modules (can I just use InceptionA/B/C as a module?).
+    #       may require to actually understand what they are doing in the paper https://arxiv.org/pdf/1512.00567.pdf
+    pass
+
+
+def create_facescrub_autoencoder(experiment, corruption_names, dev):
+    pass
+

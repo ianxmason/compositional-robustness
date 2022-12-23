@@ -16,6 +16,7 @@ echo $CUDA_DEVICE_ORDER
 echo $SLURM_ARRAY_TASK_ID
 module load openmind/singularity/3.5.0
 
+
 # Cross entropy loss -t 12:00:00
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
 # Contrastive loss -t 14:00:00
@@ -50,4 +51,14 @@ singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-t
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "AutoModulesV3" --weights "1,1,1,1,1,1" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "AutoModulesV3NoPassThrough" --weights "1,1,1,1,1,1" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train_emnist.py --experiment "AutoModulesV3NoInvariance" --weights "0,0,0,0,0,0" --corruption-ID $SLURM_ARRAY_TASK_ID --pin-mem --check-if-run
+
+
+# Below here is after changing optimizer. EMNIST will probably need to change lr and maybe max epochs
+
+# CIFAR Modules
+#python train_emnist.py --pin-mem --check-if-run --corruption-ID 0 --dataset "CIFAR" --total-n-classes 10 --max-epochs 200 --lr 1e-1 --experiment Modules --weights "1,1,1,1,1,1,1,1,1,1"
+
+# FACESCRUB Modules
+#python train_emnist.py --pin-mem --check-if-run --corruption-ID 0 --dataset "FACESCRUB" --total-n-classes 388 --max-epochs 200 --lr 1e-1 --experiment Modules --weights "1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1"
+
 

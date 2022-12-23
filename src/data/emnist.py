@@ -21,6 +21,8 @@ sys.path.append("../")
 import data.data_transforms as dt
 from lib.utils import mkdir_p
 
+EMNIST_MEAN = (0.17521884, 0.17521884, 0.17521884)
+EMNIST_STD = (0.33335212, 0.33335212, 0.33335212)
 
 class StaticEMNIST(ImageFolder):
     """

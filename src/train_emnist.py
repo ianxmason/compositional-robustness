@@ -9,8 +9,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import time
 from data.data_transforms import denormalize
-from data.data_loaders import get_multi_static_emnist_dataloaders, get_static_emnist_dataloaders
-from lib.networks import create_emnist_network, create_emnist_modules, create_emnist_autoencoder
+from data.data_loaders import get_multi_static_dataloaders, get_static_dataloaders
+from lib.networks import create_emnist_network, create_emnist_modules, create_emnist_autoencoder, \
+                         create_cifar_network, create_cifar_modules, create_cifar_autoencoder, \
+                         create_facescrub_network, create_facescrub_modules, create_facescrub_autoencoder
 from lib.early_stopping import EarlyStopping
 from lib.utils import *
 
@@ -206,8 +208,9 @@ def modules_forwards_pass(network_blocks, module, module_level, x, y, cross_entr
     return cross_entropy_loss(output, y), total_ctv_loss, accuracy_fn(output, y)
 
 
-def train_identity_network(network_blocks, network_block_ckpt_names, data_root, ckpt_path, logging_path, experiment,
-                           total_n_classes, es_burn_in, max_epochs, batch_size, lr, n_workers, pin_mem, dev):
+def train_identity_network(network_blocks, network_block_ckpt_names, dataset, data_root, ckpt_path, logging_path,
+                           experiment, total_n_classes, max_epochs, batch_size, lr, n_workers, pin_mem,
+                           dev):
     # Log File set up
     log_name = "{}_Identity.log".format(experiment)
     id_logger = custom_logger(os.path.join(logging_path, log_name), stdout=False)  # stdout True to see also in console
@@ -216,22 +219,24 @@ def train_identity_network(network_blocks, network_block_ckpt_names, data_root, 
     # Data Set Up
     corruption_path = os.path.join(data_root, "Identity")
     train_classes = list(range(total_n_classes))
-    trn_dl, val_dl, _ = get_static_emnist_dataloaders(corruption_path, train_classes, batch_size, True, n_workers,
-                                                      pin_mem)
+    trn_dl, val_dl, _ = get_static_dataloaders(dataset, corruption_path, train_classes, batch_size, True, n_workers,
+                                               pin_mem)
 
     # Network & Optimizer Set Up
     all_parameters = []
     for block in network_blocks:
         all_parameters += list(block.parameters())
-    optim = torch.optim.Adam(all_parameters, lr)
+
+    # optim = torch.optim.Adam(all_parameters, lr)  # Todo: used this for original EMNIST - test EMNIST with new set up
+    optim = torch.optim.SGD(all_parameters, lr, momentum=0.9, weight_decay=5e-4)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=max_epochs)
 
     # Early Stopping Set Up
     es_ckpt_paths = [os.path.join(ckpt_path, "es_ckpt_{}.pt".format(block_ckpt_name)) for block_ckpt_name in
                      network_block_ckpt_names]
-    early_stoppings = [EarlyStopping(patience=25, verbose=True, path=es_ckpt_path, trace_func=id_logger.info) for
+    early_stoppings = [EarlyStopping(patience=max_epochs, verbose=True, path=es_ckpt_path, trace_func=id_logger.info) for
                        es_ckpt_path in es_ckpt_paths]
     assert len(early_stoppings) == len(network_blocks)
-    burn_in_count = 0
 
     # Loss Function Set Up
     cross_entropy_loss = nn.CrossEntropyLoss()
@@ -251,6 +256,8 @@ def train_identity_network(network_blocks, network_block_ckpt_names, data_root, 
             epoch_acc += acc
             loss.backward()
             optim.step()
+        scheduler.step()
+        # print(optim.param_groups[0]['lr'])
         results = [epoch,
                    epoch_loss / len(trn_dl),
                    epoch_acc / len(trn_dl)]
@@ -270,13 +277,11 @@ def train_identity_network(network_blocks, network_block_ckpt_names, data_root, 
         id_logger.info("Validation CE loss {:6.4f}".format(valid_loss / len(val_dl)))
         id_logger.info("Validation accuracy {:6.3f}".format(valid_acc / len(val_dl)))
         # Early Stopping
-        burn_in_count += 1
-        if burn_in_count >= es_burn_in:
-            for es, block in zip(early_stoppings, network_blocks):
-                es(valid_loss / len(val_dl), block)  # ES on loss
-            if early_stoppings[0].early_stop:
-                id_logger.info("Early stopping")
-                break
+        for es, block in zip(early_stoppings, network_blocks):
+            es(valid_loss / len(val_dl), block)  # ES on loss
+        if early_stoppings[0].early_stop:
+            id_logger.info("Early stopping")
+            break
 
     # Save model
     id_logger.info("Loading early stopped checkpoints")
@@ -304,7 +309,7 @@ def train_identity_network(network_blocks, network_block_ckpt_names, data_root, 
     return network_blocks
 
 
-def train_classifiers(data_root, ckpt_path, logging_path, experiment, total_n_classes, es_burn_in, max_epochs,
+def train_classifiers(dataset, data_root, ckpt_path, logging_path, experiment, total_n_classes, max_epochs,
                       batch_size, lr, n_workers, pin_mem, dev, check_if_run):
     """
     Trains 2 classifiers for use with autoencoders designed to remove each corruption.
@@ -329,7 +334,7 @@ def train_classifiers(data_root, ckpt_path, logging_path, experiment, total_n_cl
             os.path.join(ckpt_path, network_block_ckpt_names[0])))
     else:
         train_identity_network(network_blocks, network_block_ckpt_names, data_root, ckpt_path, logging_path,
-                               experiment + "Classifier", total_n_classes, es_burn_in, max_epochs, batch_size, lr,
+                               experiment + "Classifier", total_n_classes, max_epochs, batch_size, lr,
                                n_workers, pin_mem, dev)
 
     # Train classifier on all corruptions
@@ -340,8 +345,8 @@ def train_classifiers(data_root, ckpt_path, logging_path, experiment, total_n_cl
     single_corr_bs = batch_size // len(corruption_paths)
     trn_dls, val_dls = [], []
     for corruption_path, generator in zip(corruption_paths, generators):
-        trn_dl, val_dl, _ = get_static_emnist_dataloaders(corruption_path, train_classes, single_corr_bs,
-                                                          True, n_workers, pin_mem, fixed_generator=generator)
+        trn_dl, val_dl, _ = get_static_dataloaders(dataset, corruption_path, train_classes, single_corr_bs,
+                                                   True, n_workers, pin_mem, fixed_generator=generator)
         trn_dls.append(trn_dl)
         val_dls.append(val_dl)
 
@@ -363,16 +368,18 @@ def train_classifiers(data_root, ckpt_path, logging_path, experiment, total_n_cl
     all_parameters = []
     for block in network_blocks:
         all_parameters += list(block.parameters())
-    optim = torch.optim.Adam(all_parameters, lr)
+
+    # optim = torch.optim.Adam(all_parameters, lr)  # Todo: used for EMNIST, test without
+    optim = torch.optim.SGD(all_parameters, lr, momentum=0.9, weight_decay=5e-4)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=max_epochs)
 
     # Early Stopping Set Up
     es_ckpt_paths = [os.path.join(ckpt_path, "es_ckpt_{}.pt".format(block_ckpt_name)) for block_ckpt_name in
                      network_block_ckpt_names]
-    early_stoppings = [EarlyStopping(patience=25, verbose=True, path=es_ckpt_path, trace_func=clsf_logger.info) for
+    early_stoppings = [EarlyStopping(patience=max_epochs, verbose=True, path=es_ckpt_path, trace_func=clsf_logger.info) for
                        es_ckpt_path in es_ckpt_paths]
     assert len(early_stoppings) == len(network_blocks)
     val_freq = len(trn_dls[0]) // len(corruption_paths)
-    burn_in_count = 0
     clsf_logger.info("Validation frequency: every {} batches".format(val_freq))
 
     # Loss Function Set Up
@@ -441,16 +448,14 @@ def train_classifiers(data_root, ckpt_path, logging_path, experiment, total_n_cl
                 clsf_logger.info("Validation accuracy {:6.3f}".format(valid_acc / len(val_dls[0])))
 
                 # Early Stopping
-                burn_in_count += 1
-                if burn_in_count >= es_burn_in:
-                    for es, block in zip(early_stoppings, network_blocks):
-                        es(valid_loss / len(val_dls[0]), block)  # ES on loss
-                    if early_stoppings[0].early_stop:
-                        clsf_logger.info("Early stopping")
-                        break
+                for es, block in zip(early_stoppings, network_blocks):
+                    es(valid_loss / len(val_dls[0]), block)  # ES on loss
+                if early_stoppings[0].early_stop:
+                    clsf_logger.info("Early stopping")
+                    break
                 for block in network_blocks:
                     block.train()
-
+        scheduler.step()
         if early_stoppings[0].early_stop:
             break
         results = [epoch,
@@ -490,7 +495,7 @@ def train_classifiers(data_root, ckpt_path, logging_path, experiment, total_n_cl
         clsf_logger.info("Saved best classifier block to {}".format(os.path.join(ckpt_path, block_ckpt_name)))
 
 
-def find_contrastive_abstraction_level(corruption_names, trn_dls, val_dls, lr, cross_entropy_loss, accuracy_fn,
+def find_contrastive_abstraction_level(corruption_names, dataset, trn_dls, val_dls, lr, cross_entropy_loss, accuracy_fn,
                                        contrastive_loss, weights, total_n_classes, single_corr_bs, dev,
                                        num_iterations=200, num_repeats=3):
     """
@@ -505,7 +510,13 @@ def find_contrastive_abstraction_level(corruption_names, trn_dls, val_dls, lr, c
     1. the batch size is a multiple of single_corr_bs
     2. the identity data is the last corruption in the batch
     """
-    network_blocks, _ = create_emnist_network(total_n_classes, "temp", "temp", dev)
+    if dataset == "EMNIST":
+        network_blocks, _ = create_emnist_network(total_n_classes, "temp", "temp", dev)
+    elif dataset == "CIFAR":
+        network_blocks, _ = create_cifar_network(total_n_classes, "temp", "temp", dev)
+    elif dataset == "FACESCRUB":
+        network_blocks, _ = create_facescrub_network(total_n_classes, "temp", "temp", dev)
+
     id_idx = corruption_names.index("Identity")
     assert id_idx == len(corruption_names) - 1  # Identity must be the last corruption
     val_accs = {}
@@ -521,11 +532,18 @@ def find_contrastive_abstraction_level(corruption_names, trn_dls, val_dls, lr, c
 
             print("Finding contrastive abstraction level for {}".format(corr))
             for j in range(1, len(network_blocks)):
-                network_blocks, _ = create_emnist_network(total_n_classes, "temp", "temp", dev)
+                if dataset == "EMNIST":
+                    network_blocks, _ = create_emnist_network(total_n_classes, "temp", "temp", dev)
+                elif dataset == "CIFAR":
+                    network_blocks, _ = create_cifar_network(total_n_classes, "temp", "temp", dev)
+                elif dataset == "FACESCRUB":
+                    network_blocks, _ = create_facescrub_network(total_n_classes, "temp", "temp", dev)
+
                 temp_parameters = []
                 for block in network_blocks:
                     temp_parameters += list(block.parameters())
-                temp_optim = torch.optim.Adam(temp_parameters, lr)
+                # temp_optim = torch.optim.Adam(temp_parameters, lr)
+                temp_optim = torch.optim.SGD(temp_parameters, lr, momentum=0.9, weight_decay=5e-4)
 
                 print("Abstraction level {}".format(j))
                 abstraction_levels = [j]
@@ -615,7 +633,7 @@ def find_contrastive_abstraction_level(corruption_names, trn_dls, val_dls, lr, c
     return abstraction_levels
 
 
-def find_module_abstraction_level(network_blocks, trn_dls, val_dls, logging_path, corruption_names, lr,
+def find_module_abstraction_level(network_blocks, dataset, trn_dls, val_dls, logging_path, corruption_names, lr,
                                   cross_entropy_loss, accuracy_fn, contrastive_loss, weights, single_corr_bs, dev,
                                   pass_through, num_iterations=50, num_repeats=5):
     """
@@ -629,12 +647,19 @@ def find_module_abstraction_level(network_blocks, trn_dls, val_dls, logging_path
     val_accs = {}
     train_accs = {}  # For plotting learning curves over num_iterations
     for n in range(num_repeats):
-        temp_modules, _ = create_emnist_modules("temp", "temp", dev)
+        if dataset == "EMNIST":
+            temp_modules, _ = create_emnist_modules("temp", "temp", dev)
+        elif dataset == "CIFAR":
+            temp_modules, _ = create_cifar_modules("temp", "temp", dev)
+        elif dataset == "FACESCRUB":
+            temp_modules, _ = create_facescrub_modules("temp", "temp", dev)
+
         val_accs[n] = []
         for i, module in enumerate(temp_modules):
             print("Abstraction Level {}".format(i))
             train_accs["Level-{}_Repeat-{}".format(i, n)] = []
-            temp_optim = torch.optim.Adam(module.parameters(), lr)
+            # temp_optim = torch.optim.Adam(module.parameters(), lr)
+            temp_optim = torch.optim.SGD(module.parameters(), lr, momentum=0.9, weight_decay=5e-4)
 
             module_ce_loss = 0.0
             module_ctv_loss = 0.0
@@ -712,9 +737,8 @@ def find_module_abstraction_level(network_blocks, trn_dls, val_dls, logging_path
     return best_level
 
 
-def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, weights, temperature, total_n_classes,
-         es_burn_in, max_epochs, batch_size, lr, n_workers, pin_mem, dev, vis_data, check_if_run):
-    assert max_epochs > es_burn_in
+def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, experiment, weights, temperature,
+         total_n_classes, max_epochs, batch_size, lr, n_workers, pin_mem, dev, vis_data, check_if_run):
     # Train all models
     for corruption_names in corruptions:
         # Log File set up
@@ -726,8 +750,8 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
         corruption_paths = [os.path.join(data_root, corruption_name) for corruption_name in corruption_names]
         train_classes = list(range(total_n_classes))
         if "CrossEntropy" in experiment:  # randomly mix all corruptions
-            trn_dl, val_dl, _ = get_multi_static_emnist_dataloaders(corruption_paths, train_classes, batch_size,
-                                                                    True, n_workers, pin_mem)
+            trn_dl, val_dl, _ = get_multi_static_dataloaders(dataset, corruption_paths, train_classes, batch_size,
+                                                             True, n_workers, pin_mem)
             trn_dls = [trn_dl]
             val_dls = [val_dl]
         elif "Contrastive" in experiment or "Modules" in experiment or "ImgSpace" in experiment:  # each batch contains the same images with different corruptions
@@ -735,8 +759,8 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
             single_corr_bs = batch_size // len(corruption_names)
             trn_dls, val_dls = [], []
             for corruption_path, generator in zip(corruption_paths, generators):
-                trn_dl, val_dl, _ = get_static_emnist_dataloaders(corruption_path, train_classes, single_corr_bs,
-                                                                  True, n_workers, pin_mem, fixed_generator=generator)
+                trn_dl, val_dl, _ = get_static_dataloaders(dataset, corruption_path, train_classes, single_corr_bs,
+                                                           True, n_workers, pin_mem, fixed_generator=generator)
                 trn_dls.append(trn_dl)
                 val_dls.append(val_dl)
 
@@ -745,8 +769,15 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
                     raise ValueError("Initial module training only uses single corruptions (plus the identity)")
 
                 # Load identity network or create it if it doesn't exist
-                network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, "Modules",
-                                                                                 ["Identity"], dev)
+                if dataset == "EMNIST":
+                    network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, "Modules",
+                                                                                     ["Identity"], dev)
+                elif dataset == "CIFAR":
+                    network_blocks, network_block_ckpt_names = create_cifar_network(total_n_classes, "Modules",
+                                                                                    ["Identity"], dev)
+                elif dataset == "FACESCRUB":
+                    network_blocks, network_block_ckpt_names = create_facescrub_network(total_n_classes, "Modules",
+                                                                                        ["Identity"], dev)
                 assert len(network_blocks) >= 2  # assumed when the network is called
                 assert len(weights) == len(network_blocks)  # one module before each layer (including image space)
                 if os.path.exists(os.path.join(ckpt_path, network_block_ckpt_names[0])):
@@ -758,9 +789,9 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
                     raise RuntimeError("Early stopping checkpoint found. Training may be running in another process.")
                 else:
                     logger.info("Identity network not found. Training it now.")
-                    _ = train_identity_network(network_blocks, network_block_ckpt_names, data_root,
+                    _ = train_identity_network(network_blocks, network_block_ckpt_names, dataset, data_root,
                                                ckpt_path, logging_path, experiment, total_n_classes,
-                                               es_burn_in, max_epochs, batch_size, lr, n_workers, pin_mem, dev)
+                                               max_epochs, batch_size, lr, n_workers, pin_mem, dev)
                     # A hack, not necessary but makes usage more consistent.
                     raise RuntimeError("Identity network training completed - rerun for corruption experiments")
         else:
@@ -796,29 +827,41 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
             if "Contrastive" in experiment:
                 if "Auto" in experiment:
                     logger.info("Choosing Levels of Abstraction")
-                    contrastive_levels = find_contrastive_abstraction_level(corruption_names, trn_dls, val_dls, lr,
-                                                                            cross_entropy_loss, accuracy_fn,
+                    contrastive_levels = find_contrastive_abstraction_level(corruption_names, dataset, trn_dls, val_dls,
+                                                                            lr, cross_entropy_loss, accuracy_fn,
                                                                             contrastive_loss, weights, total_n_classes,
                                                                             single_corr_bs, dev)
                 elif "ModLevel" in experiment: # Hardcoded to match the best AutoModules levels of abstraction seen so far
                     contrastive_levels = [1, 1, 1, 2, 3, 4]
                 else:  # Penultimate layer (fully connected)
+                    # Todo: set this (and above) depending on architecture for EMNIST/CIFAR/FACESCRUB
                     contrastive_levels = [5] * (len(corruption_names) - 1)
                 logger.info("Using Levels of Abstraction {}".format(contrastive_levels))
 
-            network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, experiment,
-                                                                             corruption_names, dev)
+            if dataset == "EMNIST":
+                network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, experiment,
+                                                                                 corruption_names, dev)
+            elif dataset == "CIFAR":
+                network_blocks, network_block_ckpt_names = create_cifar_network(total_n_classes, experiment,
+                                                                                corruption_names, dev)
+            elif dataset == "FACESCRUB":
+                network_blocks, network_block_ckpt_names = create_facescrub_network(total_n_classes, experiment,
+                                                                                    corruption_names, dev)
+
             assert len(network_blocks) >= 2  # assumed when the network is called
             if weights is not None:
                 assert len(weights) == len(network_blocks)
             all_parameters = []
             for block in network_blocks:
                 all_parameters += list(block.parameters())
-            optim = torch.optim.Adam(all_parameters, lr)
+            # optim = torch.optim.Adam(all_parameters, lr) # Todo: used for EMNIST, test without
+            optim = torch.optim.SGD(all_parameters, lr, momentum=0.9, weight_decay=5e-4)
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=max_epochs)
+
             # Early Stopping Set Up
             es_ckpt_paths = [os.path.join(ckpt_path, "es_ckpt_{}.pt".format(block_ckpt_name)) for block_ckpt_name in
                              network_block_ckpt_names]
-            early_stoppings = [EarlyStopping(patience=25, verbose=True, path=es_ckpt_path, trace_func=logger.info) for
+            early_stoppings = [EarlyStopping(patience=max_epochs, verbose=True, path=es_ckpt_path, trace_func=logger.info) for
                                es_ckpt_path in es_ckpt_paths]
             assert len(early_stoppings) == len(network_blocks)
             # Check if training has already completed for the corruption(s) in question.
@@ -833,13 +876,14 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
                 pass_through = True
             if "Auto" in experiment:
                 logger.info("Choosing Level of Abstraction")
-                module_level = find_module_abstraction_level(network_blocks, trn_dls, val_dls, logging_path,
+                module_level = find_module_abstraction_level(network_blocks, dataset, trn_dls, val_dls, logging_path,
                                                              corruption_names, lr, cross_entropy_loss, accuracy_fn,
                                                              contrastive_loss, weights, single_corr_bs, dev,
                                                              pass_through)
                 logger.info("Selected Best Level of Abstraction {}".format(module_level))
             else:
                 logger.info("Manually Defined Level of Abstraction")
+                # Todo: set this depending on architecture for EMNIST/CIFAR/FACESCRUB
                 if "Contrast" in corruption_names or "GaussianBlur" in corruption_names or \
                         "ImpulseNoise" in corruption_names or "Invert" in corruption_names:
                     module_level = 1  # After first conv layer for local corruptions
@@ -847,13 +891,22 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
                     module_level = 4  # After last conv layer for long range dependencies
                 logger.info("Using Level of Abstraction {}".format(module_level))
 
-            modules, module_ckpt_names = create_emnist_modules(experiment, corruption_names, dev)
+            if dataset == "EMNIST":
+                modules, module_ckpt_names = create_emnist_modules(experiment, corruption_names, dev)
+            elif dataset == "CIFAR":
+                modules, module_ckpt_names = create_cifar_modules(experiment, corruption_names, dev)
+            elif dataset == "FACESCRUB":
+                modules, module_ckpt_names = create_facescrub_modules(experiment, corruption_names, dev)
+
             module = modules[module_level]
             module_ckpt_name = module_ckpt_names[module_level]
-            optim = torch.optim.Adam(module.parameters(), lr)
+            # optim = torch.optim.Adam(module.parameters(), lr)  # Todo: used for EMNIST, test without
+            optim = torch.optim.SGD(module.parameters(), lr, momentum=0.9, weight_decay=5e-4)
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=max_epochs)
+
             # Early Stopping Set Up
             es_ckpt_paths = [os.path.join(ckpt_path, "es_ckpt_{}.pt".format(module_ckpt_name))]
-            early_stoppings = [EarlyStopping(patience=25, verbose=True, path=es_ckpt_path, trace_func=logger.info) for
+            early_stoppings = [EarlyStopping(patience=max_epochs, verbose=True, path=es_ckpt_path, trace_func=logger.info) for
                                es_ckpt_path in es_ckpt_paths]
             assert len(early_stoppings) == 1
             # Check if training has already completed for the corruption(s) in question.
@@ -862,16 +915,25 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
                     os.path.join(ckpt_path, module_ckpt_name), corruption_names))
                 continue
         elif "ImgSpace" in experiment:
-            network_blocks, network_block_ckpt_names = create_emnist_autoencoder(experiment, corruption_names, dev)
+            if dataset == "EMNIST":
+                network_blocks, network_block_ckpt_names = create_emnist_autoencoder(experiment, corruption_names, dev)
+            elif dataset == "CIFAR":
+                network_blocks, network_block_ckpt_names = create_cifar_autoencoder(experiment, corruption_names, dev)
+            elif dataset == "FACESCRUB":
+                network_blocks, network_block_ckpt_names = create_facescrub_autoencoder(experiment, corruption_names,
+                                                                                        dev)
             assert len(network_blocks) >= 2  # assumed when the network is called
             all_parameters = []
             for block in network_blocks:
                 all_parameters += list(block.parameters())
-            optim = torch.optim.Adam(all_parameters, lr)
+            # optim = torch.optim.Adam(all_parameters, lr)  # Todo: used for EMNIST, test without
+            optim = torch.optim.SGD(all_parameters, lr, momentum=0.9, weight_decay=5e-4)
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=max_epochs)
+
             # Early Stopping Set Up
             es_ckpt_paths = [os.path.join(ckpt_path, "es_ckpt_{}.pt".format(block_ckpt_name)) for block_ckpt_name in
                              network_block_ckpt_names]
-            early_stoppings = [EarlyStopping(patience=25, verbose=True, path=es_ckpt_path, trace_func=logger.info) for
+            early_stoppings = [EarlyStopping(patience=max_epochs, verbose=True, path=es_ckpt_path, trace_func=logger.info) for
                                es_ckpt_path in es_ckpt_paths]
             assert len(early_stoppings) == len(network_blocks)
             # Check if training has already completed for the corruption(s) in question.
@@ -884,7 +946,6 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
 
         # We want to check for early stopping after approximately equal number of batches:
         val_freq = len(trn_dls[0]) // len(corruption_names)
-        burn_in_count = 0
         logger.info("Validation frequency: every {} batches".format(val_freq))
 
         # Train Loop
@@ -997,22 +1058,20 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
                         logger.info("Validation MSE loss {:6.4f}".format(valid_ce_loss / len(val_dls[0])))
 
                     # Early Stopping
-                    burn_in_count += 1
-                    if burn_in_count >= es_burn_in:
-                        if "Modules" not in experiment:
-                            for es, block in zip(early_stoppings, network_blocks):
-                                es(valid_total_loss / len(val_dls[0]), block)  # ES on loss
-                        else:
-                            early_stoppings[0](valid_total_loss / len(val_dls[0]), module)
-                        if early_stoppings[0].early_stop:
-                            logger.info("Early stopping")
-                            break
+                    if "Modules" not in experiment:
+                        for es, block in zip(early_stoppings, network_blocks):
+                            es(valid_total_loss / len(val_dls[0]), block)  # ES on loss
+                    else:
+                        early_stoppings[0](valid_total_loss / len(val_dls[0]), module)
+                    if early_stoppings[0].early_stop:
+                        logger.info("Early stopping")
+                        break
                     if "Modules" not in experiment:
                         for block in network_blocks:
                             block.train()
                     else:
                         module.train()
-
+            scheduler.step()
             if early_stoppings[0].early_stop:
                 break
             if "CrossEntropy" in experiment:
@@ -1088,20 +1147,21 @@ def main(corruptions, data_root, ckpt_path, logging_path, vis_path, experiment, 
             torch.save(module.state_dict(), os.path.join(ckpt_path, module_ckpt_name))
             logger.info("Saved best module to {}".format(os.path.join(ckpt_path, module_ckpt_name)))
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Args to train networks on different corruptions.')
-    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST5/',
+    parser.add_argument('--dataset', type=str, default='EMNIST', help="which dataset to use")
+    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/',
                         help="path to directory containing directories of different corruptions")
-    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST5/',
+    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/',
                         help="path to directory to save checkpoints")
-    parser.add_argument('--logging-path', type=str, default='/om2/user/imason/compositions/logs/EMNIST5/',
+    parser.add_argument('--logging-path', type=str, default='/om2/user/imason/compositions/logs/',
                         help="path to directory to save logs")
-    parser.add_argument('--vis-path', type=str, default='/om2/user/imason/compositions/figs/EMNIST5/visualisations/',
+    parser.add_argument('--vis-path', type=str, default='/om2/user/imason/compositions/figs/',
                         help="path to directory to save data visualisations")
     parser.add_argument('--experiment', type=str, default='CrossEntropy',
                         help="which method to use. CrossEntropy or Contrastive or Modules.")
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
-    parser.add_argument('--es-burn-in', type=int, default=10, help="min number of validation steps before early stopping")
     parser.add_argument('--max-epochs', type=int, default=50, help="max number of training epochs")
     parser.add_argument('--batch-size', type=int, default=256, help="batch size")
     parser.add_argument('--lr', type=float, default=1e-3, help="learning rate")
@@ -1115,6 +1175,10 @@ if __name__ == "__main__":
     parser.add_argument('--weights', type=str, help="comma delimited string of weights for the contrastive loss")
     parser.add_argument('--temperature', type=float, default=0.15, help="contrastive loss temperature")
     args = parser.parse_args()
+
+    # Check dataset
+    if args.dataset not in ["EMNIST", "CIFAR", "FACESCRUB"]:
+        raise ValueError("Dataset {} not implemented".format(args.dataset))
 
     # Set seeding
     reset_rngs(seed=1357911, deterministic=True)
@@ -1134,7 +1198,11 @@ if __name__ == "__main__":
     else:
         weights = None
 
-    # Create unmade directories
+    # Set up and create unmade directories
+    args.data_root = os.path.join(args.data_root, args.dataset)
+    args.ckpt_path = os.path.join(args.ckpt_path, args.dataset)
+    args.logging_path = os.path.join(args.logging_path, args.dataset)
+    args.vis_path = os.path.join(args.vis_path, args.dataset, "visualisations")
     mkdir_p(args.ckpt_path)
     mkdir_p(args.logging_path)
     if args.vis_data:
@@ -1178,6 +1246,13 @@ if __name__ == "__main__":
     CUDA_VISIBLE_DEVICES=4 python train_emnist.py --pin-mem --check-if-run --corruption-ID 34 --vis-data --experiment Contrastive --weights  1,1,1,1,1,1
     CUDA_VISIBLE_DEVICES=4 python train_emnist.py --pin-mem --check-if-run --corruption-ID 0 --experiment Modules --weights 1,1,1,1,1,1
     CUDA_VISIBLE_DEVICES=4 python train_emnist.py --pin-mem --check-if-run --corruption-ID 0 --experiment ImgSpace
+    
+    CUDA_VISIBLE_DEVICES=4 python train_emnist.py --pin-mem --check-if-run --corruption-ID 0 --dataset CIFAR --total-n-classes 10 --max-epochs 200 --lr 1e-3 --experiment Modules --weights 1,1,1,1,1,1,1,1,1,1
+    CUDA_VISIBLE_DEVICES=5 python train_emnist.py --pin-mem --check-if-run --corruption-ID 0 --dataset FACESCRUB --total-n-classes 388 --max-epochs 200 --experiment Modules --weights 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+    
+    The below does decently - about 80-82% validation (with no augmentation)
+    CUDA_VISIBLE_DEVICES=5 python train_emnist.py --pin-mem --check-if-run --corruption-ID 0 --dataset FACESCRUB --total-n-classes 388 --experiment Modules --weights 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+
     """
 
     # Searching learning rates. Change --array=0-47 to --array=0-191
@@ -1187,13 +1262,13 @@ if __name__ == "__main__":
     # corruptions = corruptions[(args.corruption_ID % len(corruptions)):(args.corruption_ID % len(corruptions)) + 1]
     # args.lr = lrs[exp_idx]
 
-    main(corruptions, args.data_root, args.ckpt_path, args.logging_path, args.vis_path, args.experiment, weights,
-         args.temperature, args.total_n_classes, args.es_burn_in, args.max_epochs, args.batch_size, args.lr,
+    main(corruptions, args.dataset, args.data_root, args.ckpt_path, args.logging_path, args.vis_path, args.experiment, weights,
+         args.temperature, args.total_n_classes, args.max_epochs, args.batch_size, args.lr,
          args.n_workers, args.pin_mem, dev, args.vis_data, args.check_if_run)
 
     if "ImgSpace" in args.experiment:  # Trains classifier on top of autoencoded images
-        train_classifiers(args.data_root, args.ckpt_path, args.logging_path, args.experiment, args.total_n_classes,
-                          args.es_burn_in, args.max_epochs, args.batch_size, args.lr, args.n_workers, args.pin_mem,
-                          dev, args.check_if_run)
+        train_classifiers(args.dataset, args.data_root, args.ckpt_path, args.logging_path, args.experiment,
+                          args.total_n_classes, args.max_epochs, args.batch_size, args.lr,
+                          args.n_workers, args.pin_mem, dev, args.check_if_run)
 
 

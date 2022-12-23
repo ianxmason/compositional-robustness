@@ -21,6 +21,8 @@ sys.path.append("../")
 import data.data_transforms as dt
 from lib.utils import mkdir_p
 
+CIFAR10_MEAN = (0.49086496, 0.48182634, 0.44628558)
+CIFAR10_STD = (0.24671966, 0.24326433, 0.26157698)
 
 class StaticCIFAR10(ImageFolder):
     def __init__(self, root: str, keep_classes: Any = None, which_set: str = 'train', **kwargs: Any):

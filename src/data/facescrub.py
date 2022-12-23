@@ -21,6 +21,8 @@ sys.path.append("../")
 import data.data_transforms as dt
 from lib.utils import mkdir_p
 
+FACESCRUB_MEAN = (0.6166735, 0.46459484, 0.3915861)
+FACESCRUB_STD = (0.2678699, 0.2301332, 0.22064506)
 
 class StaticFACESCRUB(ImageFolder):
     def __init__(self, root: str, keep_classes: Any = None, which_set: str = 'train', **kwargs: Any):
