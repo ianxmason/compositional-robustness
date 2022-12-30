@@ -7,7 +7,7 @@ import pickle
 import torch
 import torch.nn as nn
 import time
-from data.data_transforms import denormalize
+from data.data_transforms import denormalize_255
 from data.data_loaders import get_multi_static_dataloaders, get_static_dataloaders
 from lib.networks import create_emnist_network, create_emnist_modules, create_emnist_autoencoder, \
                          create_cifar_network, create_cifar_modules, create_cifar_autoencoder, \
