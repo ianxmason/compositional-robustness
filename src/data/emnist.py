@@ -77,55 +77,13 @@ class StaticEMNIST(ImageFolder):
         return len(self.imgs)
 
 
-def _get_emnist_datasets(root_dir, as_datasets=False, transform=None, norm=False, color=False):
+def _get_emnist_datasets(root_dir):
     print(root_dir)
-    sorted_tr_data = _get_sorted_data(EMNIST(root_dir, "balanced", train=True))
-    sorted_tst_data = _get_sorted_data(EMNIST(root_dir, "balanced", train=False))
+    sorted_tr_data = _get_sorted_data(EMNIST(root_dir, "balanced", train=True, download=True))
+    sorted_tst_data = _get_sorted_data(EMNIST(root_dir, "balanced", train=False, download=True))
     sorted_tr_data, sorted_val_data = _train_val_split(*sorted_tr_data)
-    if not as_datasets:
-        return [sorted_tr_data, sorted_val_data, sorted_tst_data]
 
-    tr_ds = EMNIST(root_dir, "balanced", train=True, transform=transform)
-    val_ds = EMNIST(root_dir, "balanced", train=True, transform=transform)
-    tst_ds = EMNIST(root_dir, "balanced", train=False, transform=transform)
-
-    print(tr_ds.data.shape)
-    print(tr_ds.data.max())
-
-    tr_ds = _replace_data_and_targets(tr_ds, sorted_tr_data[0], sorted_tr_data[1], norm, color)
-    val_ds = _replace_data_and_targets(val_ds, sorted_val_data[0], sorted_val_data[1], norm, color)
-    tst_ds = _replace_data_and_targets(tst_ds, sorted_tst_data[0], sorted_tst_data[1], norm, color)
-
-    print(tr_ds.data.shape)
-    print(tr_ds.data.max())
-
-    return tr_ds, val_ds, tst_ds
-
-
-def _replace_data_and_targets(ds, data, targets, norm, color):
-    # if norm:
-    #     data = data.astype(np.float32) * float(2./255.) - 1.     # (0, 255) --> (-1, 1)
-    # if color:
-    #     data = data.reshape((-1, data.shape[1], data.shape[2], 1))  # [-1, 28, 28] --> [-1, 1, 28, 28]
-    #     data = np.concatenate([data, data, data], axis=3)  # [-1, 1, 28, 28] --> [-1, 3, 28, 28]
-    ds.data = torch.from_numpy(data)
-    ds.targets = torch.from_numpy(targets)
-    return ds
-
-
-def _create_multi_background_dataset(bg_imgs, sorted_imgs, sorted_labels, save_path):
-    current_lbl = "Init"
-    i = 0
-    for img, lbl in zip(sorted_imgs, sorted_labels):
-        if lbl != current_lbl:
-            i = 0
-            current_lbl = lbl
-            mkdir_p(os.path.join(save_path, str(current_lbl)))
-        bg_img = np.random.choice(bg_imgs)
-        c_img = dt.colour_background(img, bg_img)
-        imsave(os.path.join(save_path, str(current_lbl), str(i)), c_img)
-        i += 1
-        break
+    return [sorted_tr_data, sorted_val_data, sorted_tst_data]
 
 
 def _create_target_dataset(sorted_imgs, sorted_labels, transform_fns, save_path):
@@ -147,8 +105,6 @@ def _create_target_dataset(sorted_imgs, sorted_labels, transform_fns, save_path)
         for transform_fn in transform_fns:
             img = transform_fn(img)
         PIL.Image.fromarray(np.uint8(img)).save(img_save_path)
-        # transf_img = transform_fn(img)                                          # float32 array
-        # PIL.Image.fromarray(np.uint8(transf_img)).save(img_save_path)           # save as int8 image (grey or colour)
         i += 1
 
 
@@ -200,7 +156,7 @@ if __name__ == "__main__":
 
     # PATHS
     root_dir = "/om2/user/imason/compositions/datasets/"
-    output_dir = os.path.join(root_dir, "EMNIST_TEMP/")
+    output_dir = os.path.join(root_dir, "EMNIST/")
 
 
     if create_datasets:
@@ -211,9 +167,11 @@ if __name__ == "__main__":
         # CREATE TARGET DATASETS: E.G. ../datasets/mnist/EMNIST/inverse/train/0/21.jpg
         np.random.seed(seed)   # diff transforms for train, val and test sets.
         for (sorted_imgs, sorted_labels), dset_name in zip(all_data, dset_names):
-            # SETUP TARGET DATASETS FROM CORRUPTIONS AND COMPOSITIONS IN PKL FILE
-            with open(os.path.join(output_dir, "corruption_names.pkl"), "rb") as f:
-                all_corruptions = pickle.load(f)
+            all_corruptions = [['Identity'], ['Contrast'], ['GaussianBlur'], ['ImpulseNoise'], ['Invert'],
+                               ['Rotate90'], ['Swirl']]
+            # # Can also create all composition using pkl file
+            # with open(os.path.join(output_dir, "corruption_names.pkl"), "rb") as f:
+            #     all_corruptions = pickle.load(f)
 
             # EMNIST4 or EMNIST5
             c_names = all_corruptions[args.corruption_ID]

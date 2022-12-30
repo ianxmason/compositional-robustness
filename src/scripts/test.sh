@@ -16,7 +16,14 @@ echo $SLURM_ARRAY_TASK_ID
 
 module load openmind/singularity/3.5.0
 
-# For V2 tests always leave --test-all on. Simply set --experiment to each of:
+# For new tests always leave --test-all on. Simply set --experiment to each of:
+# "CrossEntropy"
+# "Contrastive"
+# "Modules"
+# "AutoModules"
+# "ImgSpace"
+
+# Old experiments (some may be needed for final version e.g. ModLevelContrastive)
 # "CrossEntropyV2"
 # "ContrastiveV2"
 # "AutoContrastiveV2"
@@ -37,11 +44,13 @@ jobs_per_gpu=4
 for ((number=0; number<$jobs_per_gpu; number++))
 do
   singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg \
-              python test_emnist.py --pin-mem \
-                                    --check-if-run \
-                                    --test-all \
-                                    --experiment "AutoModulesV2" \
-                                    --num-processes $(($SLURM_ARRAY_TASK_COUNT * $jobs_per_gpu)) \
-                                    --process $(($SLURM_ARRAY_TASK_ID * $jobs_per_gpu + $number)) &
+              python test.py --pin-mem \
+                             --check-if-run \
+                             --test-all \
+                             --dataset "FACESCRUB" \
+                             --total-n-classes 388 \
+                             --experiment "ImgSpace" \
+                             --num-processes $(($SLURM_ARRAY_TASK_COUNT * $jobs_per_gpu)) \
+                             --process $(($SLURM_ARRAY_TASK_ID * $jobs_per_gpu + $number)) &
 done
 wait

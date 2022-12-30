@@ -128,8 +128,7 @@ def create_emnist_modules(experiment, corruption_names, dev):
             nn.Dropout2d(0.3),
             nn.ReLU(),
             nn.ConvTranspose2d(64, 3, kernel_size=5, stride=2, padding=2, output_padding=1),
-            nn.Dropout2d(0.1),
-            nn.Tanh()  # normalized data is in range [-1, 1]
+            nn.Dropout2d(0.1)  # data has mean 0, std 1. so no activation
         ).to(dev)
     )
     module_ckpt_names.append("{}_ConvModule0_{}.pt".format(experiment, '-'.join(corruption_names)))  # In image space
@@ -224,8 +223,7 @@ def create_emnist_autoencoder(experiment, corruption_names, dev):
             nn.ConvTranspose2d(128, 64, kernel_size=5, stride=2, padding=2, output_padding=1),
             nn.Dropout2d(0.3),
             nn.ReLU(),
-            nn.ConvTranspose2d(64, 3, kernel_size=5, stride=2, padding=2, output_padding=1),
-            nn.Tanh()  # normalized data is in range [-1, 1]
+            nn.ConvTranspose2d(64, 3, kernel_size=5, stride=2, padding=2, output_padding=1)  # data has mean 0, std 1. so no activation
         ).to(dev)
     )
     network_block_ckpt_names.append("{}_Decoder_{}.pt".format(experiment, '-'.join(corruption_names)))
@@ -239,49 +237,135 @@ def create_cifar_network(total_n_classes, experiment, corruption_names, dev):
 
     network_blocks = []
     network_block_ckpt_names = []
-
+    # Input 3, 32, 32
     network_blocks.append(nn.Sequential(resnet.conv1, resnet.bn1, resnet.relu).to(dev))
     network_block_ckpt_names.append("{}_ResnetBlock1_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 64, 16, 16
     network_blocks.append(resnet.layer1[0].to(dev))
     network_block_ckpt_names.append("{}_ResnetBlock2_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 64, 16, 16
     network_blocks.append(resnet.layer1[1].to(dev))
     network_block_ckpt_names.append("{}_ResnetBlock3_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 64, 16, 16
     network_blocks.append(resnet.layer2[0].to(dev))
     network_block_ckpt_names.append("{}_ResnetBlock4_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 128, 8, 8
     network_blocks.append(resnet.layer2[1].to(dev))
     network_block_ckpt_names.append("{}_ResnetBlock5_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 128, 8, 8
     network_blocks.append(resnet.layer3[0].to(dev))
     network_block_ckpt_names.append("{}_ResnetBlock6_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 256, 4, 4
     network_blocks.append(resnet.layer3[1].to(dev))
     network_block_ckpt_names.append("{}_ResnetBlock7_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 256, 4, 4
     network_blocks.append(resnet.layer4[0].to(dev))
     network_block_ckpt_names.append("{}_ResnetBlock8_{}.pt".format(experiment, '-'.join(corruption_names)))
-
-    network_blocks.append(nn.Sequential(resnet.layer4[1], resnet.avgpool).to(dev))
+    # 512, 2, 2
+    network_blocks.append(nn.Sequential(resnet.layer4[1], resnet.avgpool, nn.Flatten()).to(dev))
     network_block_ckpt_names.append("{}_ResnetBlock9_{}.pt".format(experiment, '-'.join(corruption_names)))
-
-    network_blocks.append(nn.Sequential(nn.Flatten(), SimpleClassifier(512, total_n_classes)).to(dev))
+    # 512,
+    network_blocks.append(SimpleClassifier(512, total_n_classes).to(dev))
     network_block_ckpt_names.append("{}_ResnetClassifier_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 10,
     assert len(network_block_ckpt_names) == len(network_blocks)
     return network_blocks, network_block_ckpt_names
 
 
 def create_cifar_modules(experiment, corruption_names, dev):
-    # Todo: check the shapes match with https://github.com/cianeastwood/bufr/blob/main/nets.py
-    # Todo: these shapes determine the shape of the modules (can I just use e.g. resnet.layer1[0] as a module?)
-    pass
+    resnet = resnet18(pretrained=False)
+
+    modules = []
+    module_ckpt_names = []
+
+    modules.append(
+        nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=5, stride=2, padding=2),
+            nn.Dropout2d(0.1),
+            nn.Conv2d(64, 64, kernel_size=5, stride=2, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 64, kernel_size=5, stride=2, padding=2, output_padding=1),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 3, kernel_size=5, stride=2, padding=2, output_padding=1),
+            nn.Dropout2d(0.1),   # data has mean 0, std 1. so no activation
+        ).to(dev)
+    )
+    module_ckpt_names.append("{}_ResnetModule0_{}.pt".format(experiment, '-'.join(corruption_names)))  # In image space
+
+    modules.append(resnet.layer1[1].to(dev))
+    module_ckpt_names.append("{}_ResnetModule1_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(resnet.layer1[1].to(dev))
+    module_ckpt_names.append("{}_ResnetModule2_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(resnet.layer1[1].to(dev))
+    module_ckpt_names.append("{}_ResnetModule3_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(resnet.layer2[1].to(dev))
+    module_ckpt_names.append("{}_ResnetModule4_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(resnet.layer2[1].to(dev))
+    module_ckpt_names.append("{}_ResnetModule5_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(resnet.layer3[1].to(dev))
+    module_ckpt_names.append("{}_ResnetModule6_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(resnet.layer3[1].to(dev))
+    module_ckpt_names.append("{}_ResnetModule7_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(resnet.layer4[1].to(dev))
+    module_ckpt_names.append("{}_ResnetModule8_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(
+        nn.Sequential(
+            nn.Linear(512, 512),
+            nn.ReLU(),
+            nn.Linear(512, 512),
+            nn.ReLU()
+        ).to(dev)
+    )
+    module_ckpt_names.append("{}_ResnetModule9_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    assert len(module_ckpt_names) == len(modules)
+    return modules, module_ckpt_names
 
 
 def create_cifar_autoencoder(experiment, corruption_names, dev):
-    pass
+    network_blocks = []
+    network_block_ckpt_names = []
+
+    network_blocks.append(
+        nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=5, stride=2, padding=2),
+            nn.Dropout2d(0.1),
+            nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.Conv2d(128, 256, kernel_size=5, stride=2, padding=2),
+            nn.Dropout2d(0.5),
+            nn.ReLU()
+        ).to(dev)
+    )
+    network_block_ckpt_names.append("{}_Encoder_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(
+        nn.Sequential(
+            nn.ConvTranspose2d(256, 128, kernel_size=5, stride=2, padding=2, output_padding=1),
+            nn.Dropout2d(0.5),
+            nn.ReLU(),
+            nn.ConvTranspose2d(128, 64, kernel_size=5, stride=2, padding=2, output_padding=1),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 3, kernel_size=5, stride=2, padding=2, output_padding=1)
+            # data has mean 0, std 1. so no activation
+        ).to(dev)
+    )
+    network_block_ckpt_names.append("{}_Decoder_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    assert len(network_block_ckpt_names) == len(network_blocks)
+    return network_blocks, network_block_ckpt_names
 
 
 def create_facescrub_network(total_n_classes, experiment, corruption_names, dev):
@@ -292,69 +376,244 @@ def create_facescrub_network(total_n_classes, experiment, corruption_names, dev)
 
     network_blocks = []
     network_block_ckpt_names = []
-
+    # Input 3, 100, 100
     network_blocks.append(inception.Conv2d_1a_3x3.to(dev))
     network_block_ckpt_names.append("{}_InceptionBlock1_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 32, 49, 49
     network_blocks.append(inception.Conv2d_2a_3x3.to(dev))
     network_block_ckpt_names.append("{}_InceptionBlock2_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 32, 47, 47
     network_blocks.append(inception.Conv2d_2b_3x3.to(dev))
     network_block_ckpt_names.append("{}_InceptionBlock3_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 64, 47, 47
     network_blocks.append(nn.Sequential(inception.maxpool1, inception.Conv2d_3b_1x1).to(dev))
     network_block_ckpt_names.append("{}_InceptionBlock4_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 80, 23, 23
     network_blocks.append(inception.Conv2d_4a_3x3.to(dev))
     network_block_ckpt_names.append("{}_InceptionBlock5_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 192, 21, 21
     network_blocks.append(nn.Sequential(inception.maxpool2, inception.Mixed_5b).to(dev))
     network_block_ckpt_names.append("{}_InceptionBlock6_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 256, 10, 10
     network_blocks.append(inception.Mixed_5c.to(dev))
     network_block_ckpt_names.append("{}_InceptionBlock7_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 288, 10, 10
     network_blocks.append(inception.Mixed_5d.to(dev))
     network_block_ckpt_names.append("{}_InceptionBlock8_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 288, 10, 10
     network_blocks.append(inception.Mixed_6a.to(dev))
     network_block_ckpt_names.append("{}_InceptionBlock9_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 768, 4, 4
     network_blocks.append(inception.Mixed_6b.to(dev))
     network_block_ckpt_names.append("{}_InceptionBlock10_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 768, 4, 4
     network_blocks.append(inception.Mixed_6c.to(dev))
     network_block_ckpt_names.append("{}_InceptionBlock11_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 768, 4, 4
     network_blocks.append(inception.Mixed_6d.to(dev))
     network_block_ckpt_names.append("{}_InceptionBlock12_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 768, 4, 4
     network_blocks.append(inception.Mixed_6e.to(dev))
     network_block_ckpt_names.append("{}_InceptionBlock13_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 768, 4, 4
     network_blocks.append(inception.Mixed_7a.to(dev))
     network_block_ckpt_names.append("{}_InceptionBlock14_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 1280, 1, 1
     network_blocks.append(inception.Mixed_7b.to(dev))
     network_block_ckpt_names.append("{}_InceptionBlock15_{}.pt".format(experiment, '-'.join(corruption_names)))
-
-    network_blocks.append(nn.Sequential(inception.Mixed_7c, inception.avgpool).to(dev))
+    # 2048, 1, 1
+    network_blocks.append(nn.Sequential(inception.Mixed_7c, inception.avgpool, nn.Flatten()).to(dev))
     network_block_ckpt_names.append("{}_InceptionBlock16_{}.pt".format(experiment, '-'.join(corruption_names)))
-
-    network_blocks.append(nn.Sequential(nn.Flatten(), SimpleClassifier(2048, total_n_classes)).to(dev))
+    # 2048,
+    network_blocks.append(SimpleClassifier(2048, total_n_classes).to(dev))
     network_block_ckpt_names.append("{}_InceptionClassifier_{}.pt".format(experiment, '-'.join(corruption_names)))
-
+    # 388,
     assert len(network_block_ckpt_names) == len(network_blocks)
     return network_blocks, network_block_ckpt_names
 
 
 def create_facescrub_modules(experiment, corruption_names, dev):
-    # Todo: check the shapes seem reasonable. Do match the pattern in inception.py (cmd click the definition of inception_v3)
-    # Todo: these shapes determine the shape of the modules (can I just use InceptionA/B/C as a module?).
-    #       may require to actually understand what they are doing in the paper https://arxiv.org/pdf/1512.00567.pdf
-    pass
+    # We use simple conv modules before mixed 5d. Then we use inception blocks as modules.
+    # This is because earlier layers to not preserve input/output size.
+    # Todo: understand the mixed layers, can we modify 5b or 5c to preserve size?
+    # Todo: can we make our own inception blocks using the methods defined in inception_v3?
+    inception = inception_v3(pretrained=False)
+
+    modules = []
+    module_ckpt_names = []
+
+    modules.append(
+        nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=5, stride=2, padding=2),
+            nn.Dropout2d(0.1),
+            nn.Conv2d(64, 64, kernel_size=5, stride=2, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 64, kernel_size=5, stride=2, padding=2, output_padding=1),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 3, kernel_size=5, stride=2, padding=2, output_padding=1),
+            nn.Dropout2d(0.1)  # data has mean 0, std 1. so no activation
+        ).to(dev)
+    )
+    module_ckpt_names.append("{}_InceptionModule0_{}.pt".format(experiment, '-'.join(corruption_names)))  # In image space
+
+    modules.append(
+        nn.Sequential(
+            nn.Conv2d(32, 32, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.Conv2d(32, 32, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU()
+        ).to(dev)
+    )
+    module_ckpt_names.append("{}_InceptionModule1_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(
+        nn.Sequential(
+            nn.Conv2d(32, 32, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.Conv2d(32, 32, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU()
+        ).to(dev)
+    )
+    module_ckpt_names.append("{}_InceptionModule2_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(
+        nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU()
+        ).to(dev)
+    )
+    module_ckpt_names.append("{}_InceptionModule3_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(
+        nn.Sequential(
+            nn.Conv2d(80, 80, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.Conv2d(80, 80, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU()
+        ).to(dev)
+    )
+    module_ckpt_names.append("{}_InceptionModule4_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(
+        nn.Sequential(
+            nn.Conv2d(192, 192, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.Conv2d(192, 192, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU()
+        ).to(dev)
+    )
+    module_ckpt_names.append("{}_InceptionModule5_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(
+        nn.Sequential(
+            nn.Conv2d(256, 256, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU()
+        ).to(dev)
+    )
+    module_ckpt_names.append("{}_InceptionModule6_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(inception.Mixed_5d.to(dev))
+    module_ckpt_names.append("{}_InceptionModule7_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(inception.Mixed_5d.to(dev))
+    module_ckpt_names.append("{}_InceptionModule8_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(inception.Mixed_6b.to(dev))
+    module_ckpt_names.append("{}_InceptionModule9_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(inception.Mixed_6c.to(dev))
+    module_ckpt_names.append("{}_InceptionModule10_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(inception.Mixed_6d.to(dev))
+    module_ckpt_names.append("{}_InceptionModule11_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(inception.Mixed_6e.to(dev))
+    module_ckpt_names.append("{}_InceptionModule12_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(inception.Mixed_6e.to(dev))
+    module_ckpt_names.append("{}_InceptionModule13_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    # Todo: can this be replaced with an inception block?
+    modules.append(
+        nn.Sequential(
+            nn.Conv2d(1280, 1280, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.Conv2d(1280, 1280, kernel_size=5, stride=1, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU()
+        ).to(dev)
+    )
+    module_ckpt_names.append("{}_InceptionModule14_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(inception.Mixed_7c.to(dev))
+    module_ckpt_names.append("{}_InceptionModule15_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    modules.append(
+        nn.Sequential(
+            nn.Linear(2048, 2048),
+            nn.ReLU(),
+            nn.Linear(2048, 2048),
+            nn.ReLU()
+        ).to(dev)
+    )
+    module_ckpt_names.append("{}_InceptionModule16_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    assert len(module_ckpt_names) == len(modules)
+    return modules, module_ckpt_names
 
 
 def create_facescrub_autoencoder(experiment, corruption_names, dev):
-    pass
+    network_blocks = []
+    network_block_ckpt_names = []
+
+    network_blocks.append(
+        nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=5, stride=2, padding=2),
+            nn.Dropout2d(0.1),
+            nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.Conv2d(128, 256, kernel_size=5, stride=2, padding=2),
+            nn.Dropout2d(0.5),
+            nn.ReLU()
+        ).to(dev)
+    )
+    network_block_ckpt_names.append("{}_Encoder_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    network_blocks.append(
+        nn.Sequential(
+            nn.ConvTranspose2d(256, 128, kernel_size=5, stride=2, padding=2),
+            nn.Dropout2d(0.5),
+            nn.ReLU(),
+            nn.ConvTranspose2d(128, 64, kernel_size=5, stride=2, padding=2, output_padding=1),
+            nn.Dropout2d(0.3),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 3, kernel_size=5, stride=2, padding=2, output_padding=1)
+            # data has mean 0, std 1. so no activation
+        ).to(dev)
+    )
+    network_block_ckpt_names.append("{}_Decoder_{}.pt".format(experiment, '-'.join(corruption_names)))
+
+    assert len(network_block_ckpt_names) == len(network_blocks)
+    return network_blocks, network_block_ckpt_names
+
 

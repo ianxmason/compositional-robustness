@@ -15,7 +15,19 @@ import data.data_transforms as dt
 from analysis.plotting import *
 
 
-def main(elemental_corruptions, experiments, results_path, save_path):
+def main(elemental_corruptions, experiments, dataset, results_path, save_path):
+
+    if dataset == "EMNIST":
+        chance = 100./47.
+        ceiling = 89.
+    elif dataset == "CIFAR":
+        chance = 100./10.
+        ceiling = 92.
+    elif dataset == "FACESCRUB":
+        chance = 100./388.
+        ceiling = 96.
+    else:
+        raise ValueError("Dataset not implemented")
 
     elemental_corruptions = [getattr(dt, c)() for c in elemental_corruptions]
     all_results_files = os.listdir(os.path.join(results_path))
@@ -128,6 +140,12 @@ def main(elemental_corruptions, experiments, results_path, save_path):
 
     fig, axs = plt.subplots(1, 1, figsize=(8, 8))
     sns.boxplot(x="Num Elementals", y="Composition Accuracy", hue="Experiment", data=plot_df, ax=axs)
+    axs.axhline(y=chance, color='k', linestyle='--')
+    axs.text(0., chance, "Chance", verticalalignment='bottom', horizontalalignment='center', size='medium', color='k',
+             weight='semibold')
+    axs.axhline(y=ceiling, color='k', linestyle='--')
+    axs.text(5., ceiling, "Ceiling", verticalalignment='bottom', horizontalalignment='center', size='medium', color='k',
+             weight='semibold')
     axs.set_title("Composition accuracy with seen elementals")
     axs.set_ylim(0, 100)
     axs.legend(loc='center right')
@@ -150,6 +168,8 @@ def main(elemental_corruptions, experiments, results_path, save_path):
     # Violinplot
     fig, axs = plt.subplots(1, 1, figsize=(8, 8))
     sns.violinplot(x="Num Elementals", y="Composition Accuracy", hue="Experiment", data=plot_df, ax=axs)
+    axs.axhline(y=chance, color='k', linestyle='--')
+    axs.axhline(y=ceiling, color='k', linestyle='--')
     axs.set_title("Composition accuracy with seen elementals")
     axs.set_ylim(0, 100)
     axs.legend(loc='center right')
@@ -172,13 +192,24 @@ def main(elemental_corruptions, experiments, results_path, save_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Args to test networks on all corruptions in a given directory.')
-    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST5/',
+    parser.add_argument('--dataset', type=str, default='EMNIST', help="which dataset to use")
+    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/',
                         help="path to directory containing directories of different corruptions")
-    parser.add_argument('--results-path', type=str, default='/om2/user/imason/compositions/results/EMNIST5/',
+    parser.add_argument('--results-path', type=str, default='/om2/user/imason/compositions/results/',
                         help="path to directory containing results of testing")
-    parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/analysis/EMNIST5/',
+    parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/analysis/',
                         help="path to directory to save analysis plots and pickle files")
     args = parser.parse_args()
+
+    args.data_root = os.path.join(args.data_root, args.dataset)
+    args.results_path = os.path.join(args.results_path, args.dataset)
+    args.save_path = os.path.join(args.save_path, args.dataset)
+
+    # Most common experiments
+    experiments = ["CrossEntropy",
+                   "Contrastive",
+                   "Modules", "AutoModules",
+                   "ImgSpaceIdentityClassifier", "ImgSpaceJointClassifier"]
 
     # experiments = ["CrossEntropy", "Contrastive", "Modules"]
 
@@ -217,9 +248,9 @@ if __name__ == "__main__":
     #                "ImgSpaceV2IdentityClassifier", "ImgSpaceV2JointClassifier"]
 
     # Highlighting only the best modules
-    experiments = ["CrossEntropyV2",
-                   "ContrastiveL5W01",
-                   "AutoModulesV2"]
+    # experiments = ["CrossEntropyV2",
+    #                "ContrastiveL5W01",
+    #                "AutoModulesV2"]
 
     # Set seeding
     reset_rngs(seed=1357911, deterministic=True)
@@ -242,4 +273,4 @@ if __name__ == "__main__":
     If use shell script put cd analysis in shell script
     """
 
-    main(elemental_corruptions, experiments, args.results_path, args.save_path)
+    main(elemental_corruptions, experiments, args.dataset, args.results_path, args.save_path)

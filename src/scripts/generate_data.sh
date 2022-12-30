@@ -8,6 +8,6 @@
 
 cd data/
 module load openmind/singularity/3.5.0
-#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python emnist.py --corruption-ID $SLURM_ARRAY_TASK_ID
+singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python emnist.py --corruption-ID $SLURM_ARRAY_TASK_ID
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python cifar.py --corruption-ID $SLURM_ARRAY_TASK_ID
-singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python facescrub.py --corruption-ID $SLURM_ARRAY_TASK_ID
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python facescrub.py --corruption-ID $SLURM_ARRAY_TASK_ID

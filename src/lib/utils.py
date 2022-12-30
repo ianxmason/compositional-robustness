@@ -40,6 +40,21 @@ def reset_rngs(rng=None, seed=404, deterministic=False):
     seed_torch(seed, deterministic)
 
 
+def generate_batch(data_tuples, dev):
+    """
+    Takes one or more tuples (x,y) of training data from different data loaders and concatenates them into single
+    tensors for training
+    """
+    for j, data_tuple in enumerate(data_tuples):
+        if j == 0:
+            x, y = data_tuple[0], data_tuple[1]
+        else:
+            x_temp, y_temp = data_tuple[0], data_tuple[1]
+            x = torch.cat((x, x_temp), dim=0)
+            y = torch.cat((y, y_temp), dim=0)
+    return x.to(dev), y.to(dev)
+
+
 def accuracy(outputs, targets):
     _, predictions = torch.max(outputs, 1)
     return 100 * torch.sum(torch.squeeze(predictions).float() == targets).item() / float(targets.size(0))

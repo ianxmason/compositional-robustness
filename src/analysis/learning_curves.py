@@ -10,8 +10,9 @@ import pickle
 elem_corrs = ['Contrast', 'GaussianBlur', 'ImpulseNoise', 'Invert', 'Rotate90', 'Swirl']
 
 # Load the data
-logging_path = "/om2/user/imason/compositions/logs/EMNIST5/"
-save_path = "/om2/user/imason/compositions/analysis/EMNIST5/"
+dataset = "FACESCRUB"
+logging_path = "/om2/user/imason/compositions/logs/{}/".format(dataset)
+save_path = "/om2/user/imason/compositions/analysis/{}/".format(dataset)
 
 for corr in elem_corrs:
     with open(os.path.join(logging_path, "module_train_accs_{}.pkl".format(corr)), "rb") as f:

@@ -8,11 +8,13 @@ import shutil
 sys.path.append("../")
 from lib.utils import mkdir_p
 
-data_dir = '/om2/user/imason/compositions/datasets/FACESCRUB/'
-save_dir = '/om2/user/imason/compositions/check_data/FACESCRUB/'
+data_dir = '/om2/user/imason/compositions/datasets/EMNIST/'
+save_dir = '/om2/user/imason/compositions/check_data/EMNIST/'
 mkdir_p(save_dir)
 
 for corruptions in os.listdir(data_dir):
+    if corruptions == "raw":
+        continue
     if os.path.isdir(os.path.join(data_dir, corruptions)):
         mkdir_p(os.path.join(save_dir, corruptions))
         for split in ['train', 'valid', 'test']:

@@ -9,8 +9,13 @@ import torch.nn as nn
 import torchvision
 import pickle
 import data.data_transforms as dt
-from data.data_loaders import get_static_emnist_dataloaders, get_transformed_static_emnist_dataloaders
-from lib.networks import create_emnist_network, create_emnist_modules, create_emnist_autoencoder
+from data.data_loaders import get_transformed_static_dataloaders, get_static_dataloaders
+from data.emnist import EMNIST_MEAN, EMNIST_STD
+from data.cifar import CIFAR10_MEAN, CIFAR10_STD
+from data.facescrub import FACESCRUB_MEAN, FACESCRUB_STD
+from lib.networks import create_emnist_network, create_emnist_modules, create_emnist_autoencoder, \
+                         create_cifar_network, create_cifar_modules, create_cifar_autoencoder, \
+                         create_facescrub_network, create_facescrub_modules, create_facescrub_autoencoder
 from lib.utils import *
 from lib.equivariant_hooks import *
 
@@ -133,8 +138,8 @@ def autoencoders_loss_and_accuracy(all_ae_blocks, clsf_blocks, dataloader, dev):
     return test_loss / len(dataloader), test_acc / len(dataloader)
 
 
-def test_specific(experiment, data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers, pin_mem, dev,
-                  check_if_run, total_processes, process):
+def test_specific(experiment, dataset, data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers,
+                  pin_mem, dev, check_if_run, total_processes, process):
     """
     Take every checkpoint and test on the composition of the corruptions trained on
 
@@ -167,8 +172,15 @@ def test_specific(experiment, data_root, ckpt_path, save_path, total_n_classes, 
             sys.stdout.flush()
             continue
         else:
-            network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, experiment,
-                                                                             ckpt[:-3].split('-'), dev)
+            if dataset == "EMNIST":
+                network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, experiment,
+                                                                                 ckpt[:-3].split('-'), dev)
+            elif dataset == "CIFAR":
+                network_blocks, network_block_ckpt_names = create_cifar_network(total_n_classes, experiment,
+                                                                                 ckpt[:-3].split('-'), dev)
+            elif dataset == "FACESCRUB":
+                network_blocks, network_block_ckpt_names = create_facescrub_network(total_n_classes, experiment,
+                                                                                 ckpt[:-3].split('-'), dev)
             for block, block_ckpt_name in zip(network_blocks, network_block_ckpt_names):
                 block.load_state_dict(torch.load(os.path.join(ckpt_path, block_ckpt_name)))
 
@@ -178,6 +190,8 @@ def test_specific(experiment, data_root, ckpt_path, save_path, total_n_classes, 
             corruptions.remove('Identity')
         corruption_accs = {}
         corruption_losses = {}
+        # Todo: this has not been updated with the new loading of test corruptions from file rather than
+        #  from os.listdir(data_root). If we use this method we will need to update
         for test_corruption in os.listdir(data_root):
             if test_corruption == "raw" or test_corruption == "corruption_names.pkl":
                 continue
@@ -194,12 +208,16 @@ def test_specific(experiment, data_root, ckpt_path, save_path, total_n_classes, 
             #                                              n_workers, pin_mem)
 
             identity_path = os.path.join(data_root, "Identity")
-            transforms = [torchvision.transforms.Lambda(lambda im: im.convert('L'))]
-            transforms += [getattr(dt, c)() for c in test_corruption.split('-')]
-            transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='L'))]
-            transforms += [torchvision.transforms.Lambda(lambda im: im.convert('RGB'))]
-            _, _, tst_dl = get_transformed_static_emnist_dataloaders(identity_path, transforms, trained_classes,
-                                                                     batch_size, False, n_workers, pin_mem)
+            if dataset == "EMNIST":
+                transforms = [torchvision.transforms.Lambda(lambda im: im.convert('L'))]
+                transforms += [getattr(dt, c)() for c in test_corruption]
+                transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='L'))]
+                transforms += [torchvision.transforms.Lambda(lambda im: im.convert('RGB'))]
+            else:
+                transforms = [getattr(dt, c)() for c in test_corruption]
+                transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='RGB'))]
+            _, _, tst_dl = get_transformed_static_dataloaders(dataset, identity_path, transforms, trained_classes,
+                                                              batch_size, False, n_workers, pin_mem)
 
             tst_loss, tst_acc = loss_and_accuracy(network_blocks, tst_dl, dev)
             corruption_accs[test_corruption] = tst_acc
@@ -214,7 +232,7 @@ def test_specific(experiment, data_root, ckpt_path, save_path, total_n_classes, 
             pickle.dump(corruption_losses, f)
 
 
-def test_all(experiment, data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers, pin_mem, dev,
+def test_all(experiment, dataset, data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers, pin_mem, dev,
              check_if_run, total_processes, process):
     """
     Get the specific checkpoint trained on all corruptions and test on every composition
@@ -236,8 +254,15 @@ def test_all(experiment, data_root, ckpt_path, save_path, total_n_classes, batch
             os.path.join(save_path, "{}_{}_all_losses_process_{}_of_{}.pkl".format(experiment, ckpt[:-3], process,
                                                                                    total_processes)), ckpt))
     else:
-        network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, experiment,
-                                                                         ckpt[:-3].split('-'), dev)
+        if dataset == "EMNIST":
+            network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, experiment,
+                                                                             ckpt[:-3].split('-'), dev)
+        elif dataset == "CIFAR":
+            network_blocks, network_block_ckpt_names = create_cifar_network(total_n_classes, experiment,
+                                                                            ckpt[:-3].split('-'), dev)
+        elif dataset == "FACESCRUB":
+            network_blocks, network_block_ckpt_names = create_facescrub_network(total_n_classes, experiment,
+                                                                                ckpt[:-3].split('-'), dev)
         for block, block_ckpt_name in zip(network_blocks, network_block_ckpt_names):
             block.load_state_dict(torch.load(os.path.join(ckpt_path, block_ckpt_name)))
 
@@ -245,8 +270,8 @@ def test_all(experiment, data_root, ckpt_path, save_path, total_n_classes, batch
     corruption_accs = {}
     corruption_losses = {}
 
-    corruptions = os.listdir(data_root)
-    corruptions = [c for c in corruptions if c != "raw" and c != "corruption_names.pkl"]
+    with open(os.path.join(args.data_root, "corruption_names.pkl"), "rb") as f:
+        corruptions = pickle.load(f)
     corruptions.sort()
     assert len(corruptions) == 167  # hardcoded for EMNIST. 149 EMNIST4. 167 EMNIST5.
     assert total_processes <= len(corruptions)
@@ -269,17 +294,22 @@ def test_all(experiment, data_root, ckpt_path, save_path, total_n_classes, batch
         #                                              n_workers, pin_mem)
 
         identity_path = os.path.join(data_root, "Identity")
-        transforms = [torchvision.transforms.Lambda(lambda im: im.convert('L'))]
-        transforms += [getattr(dt, c)() for c in test_corruption.split('-')]
-        transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='L'))]
-        transforms += [torchvision.transforms.Lambda(lambda im: im.convert('RGB'))]
-        _, _, tst_dl = get_transformed_static_emnist_dataloaders(identity_path, transforms, trained_classes, batch_size,
-                                                                 False, n_workers, pin_mem)
+        if dataset == "EMNIST":
+            transforms = [torchvision.transforms.Lambda(lambda im: im.convert('L'))]
+            transforms += [getattr(dt, c)() for c in test_corruption]
+            transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='L'))]
+            transforms += [torchvision.transforms.Lambda(lambda im: im.convert('RGB'))]
+        else:
+            transforms = [getattr(dt, c)() for c in test_corruption]
+            transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='RGB'))]
+        _, _, tst_dl = get_transformed_static_dataloaders(dataset, identity_path, transforms, trained_classes,
+                                                          batch_size, False, n_workers, pin_mem)
 
         tst_loss, tst_acc = loss_and_accuracy(network_blocks, tst_dl, dev)
-        corruption_accs[test_corruption] = tst_acc
-        corruption_losses[test_corruption] = tst_loss
-        print("{}, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment, test_corruption, tst_loss, tst_acc))
+        corruption_accs['-'.join(test_corruption)] = tst_acc
+        corruption_losses['-'.join(test_corruption)] = tst_loss
+        print("{}, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment, '-'.join(test_corruption), tst_loss,
+                                                                   tst_acc))
         sys.stdout.flush()
 
     # Save the results
@@ -291,8 +321,8 @@ def test_all(experiment, data_root, ckpt_path, save_path, total_n_classes, batch
         pickle.dump(corruption_losses, f)
 
 
-def test_modules(experiment, data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers, pin_mem, dev,
-                 check_if_run, total_processes, process):
+def test_modules(experiment, dataset, data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers, pin_mem,
+                 dev, check_if_run, total_processes, process):
     """
     Get the specific checkpoint trained on all corruptions and test on every composition
 
@@ -311,18 +341,34 @@ def test_modules(experiment, data_root, ckpt_path, save_path, total_n_classes, b
         raise RuntimeError("Pickle file already exists at {}. \n Skipping testing.".format(
             os.path.join(save_path, "{}_all_losses_process_{}_of_{}.pkl".format(experiment, process, total_processes))))
     else:
-        network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, "Modules",
-                                                                         ["Identity"], dev)
+        if dataset == "EMNIST":
+            network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, "Modules",
+                                                                             ["Identity"], dev)
+        elif dataset == "CIFAR":
+            network_blocks, network_block_ckpt_names = create_cifar_network(total_n_classes, "Modules",
+                                                                            ["Identity"], dev)
+        elif dataset == "FACESCRUB":
+            network_blocks, network_block_ckpt_names = create_facescrub_network(total_n_classes, "Modules",
+                                                                                ["Identity"], dev)
         for block, block_ckpt_name in zip(network_blocks, network_block_ckpt_names):
             block.load_state_dict(torch.load(os.path.join(ckpt_path, block_ckpt_name)))
 
         modules = []
         module_levels = []
         for module_ckpt in module_ckpts:
-            all_modules, all_module_ckpt_names = create_emnist_modules(experiment,
-                                                                       module_ckpt.split('_')[-1][:-3].split('-'), dev)
-            module_level = int(module_ckpt.split('_')[-2][-1])
-
+            if dataset == "EMNIST":
+                all_modules, all_module_ckpt_names = create_emnist_modules(experiment,
+                                                                           module_ckpt.split('_')[-1][:-3].split('-'),
+                                                                           dev)
+            elif dataset == "CIFAR":
+                all_modules, all_module_ckpt_names = create_cifar_modules(experiment,
+                                                                          module_ckpt.split('_')[-1][:-3].split('-'),
+                                                                          dev)
+            elif dataset == "FACESCRUB":
+                all_modules, all_module_ckpt_names = create_facescrub_modules(experiment,
+                                                                           module_ckpt.split('_')[-1][:-3].split('-'),
+                                                                           dev)
+            module_level = int(module_ckpt.split('_')[-2].split("Module")[-1])
             module_levels.append(module_level)
             modules.append(all_modules[module_level])
             modules[-1].load_state_dict(torch.load(os.path.join(ckpt_path, module_ckpt)))
@@ -335,8 +381,13 @@ def test_modules(experiment, data_root, ckpt_path, save_path, total_n_classes, b
     corruption_accs = {}
     corruption_losses = {}
 
-    corruptions = os.listdir(data_root)
-    corruptions = [c for c in corruptions if c != "raw" and c != "corruption_names.pkl"]
+    # Old Version
+    # corruptions = os.listdir(data_root)
+    # corruptions = [c for c in corruptions if c != "raw" and c != "corruption_names.pkl"]
+    # corruptions.sort()
+
+    with open(os.path.join(args.data_root, "corruption_names.pkl"), "rb") as f:
+        corruptions = pickle.load(f)
     corruptions.sort()
     assert len(corruptions) == 167  # hardcoded for EMNIST. 149 EMNIST4. 167 EMNIST5.
     assert total_processes <= len(corruptions)
@@ -358,41 +409,46 @@ def test_modules(experiment, data_root, ckpt_path, save_path, total_n_classes, b
         # _, _, tst_dl = get_static_emnist_dataloaders(corruption_path, trained_classes, batch_size, False,
         #                                              n_workers, pin_mem)
 
-        # Todo: will need to check again the visualisation with RGB images as we use mode 'L' for grayscale for EMNIST
+        # _, _, tst_dl = get_static_dataloaders(dataset,os.path.join(data_root, "Contrast"), trained_classes, batch_size,
+        #                                       False, n_workers, pin_mem)
         # vis_path = '/om2/user/imason/compositions/figs/EMNIST_TEMP/'
         # x, y = next(iter(tst_dl))
-        # fig_name = "{}_old.png".format(test_corruption)
+        # fig_name = "{}_old.png".format('-'.join(test_corruption))
         # fig_path = os.path.join(vis_path, fig_name)
         # # Denormalise Images
         # x = x.detach().cpu().numpy()
         # y = y.detach().cpu().numpy()
-        # x = dt.denormalize(x).astype(np.uint8)
+        # x = dt.denormalize_255(x, np.array(CIFAR10_MEAN).astype(np.float32), np.array(CIFAR10_STD).astype(np.float32)).astype(np.uint8)
         # # And visualise
         # visualise_data(x[:25], y[:25], save_path=fig_path, title=fig_name[:-4], n_rows=5, n_cols=5)
 
         identity_path = os.path.join(data_root, "Identity")
-        transforms = [torchvision.transforms.Lambda(lambda im: im.convert('L'))]
-        transforms += [getattr(dt, c)() for c in test_corruption.split('-')]
-        transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='L'))]
-        transforms += [torchvision.transforms.Lambda(lambda im: im.convert('RGB'))]
-        _, _, tst_dl = get_transformed_static_emnist_dataloaders(identity_path, transforms, trained_classes, batch_size,
-                                                                 False, n_workers, pin_mem)
+        if dataset == "EMNIST":
+            transforms = [torchvision.transforms.Lambda(lambda im: im.convert('L'))]
+            transforms += [getattr(dt, c)() for c in test_corruption]
+            transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='L'))]
+            transforms += [torchvision.transforms.Lambda(lambda im: im.convert('RGB'))]
+        else:
+            transforms = [getattr(dt, c)() for c in test_corruption]
+            transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='RGB'))]
+        _, _, tst_dl = get_transformed_static_dataloaders(dataset, identity_path, transforms, trained_classes,
+                                                          batch_size, False, n_workers, pin_mem)
 
-        # Todo: will need to check again the visualisation with RGB images as we use mode 'L' for grayscale for EMNIST
         # vis_path = '/om2/user/imason/compositions/figs/EMNIST_TEMP/'
         # x, y = next(iter(tst_dl))
-        # fig_name = "{}_new.png".format(test_corruption)
+        # fig_name = "{}_new.png".format('-'.join(test_corruption))
         # fig_path = os.path.join(vis_path, fig_name)
         # # Denormalise Images
         # x = x.detach().cpu().numpy()
         # y = y.detach().cpu().numpy()
-        # x = dt.denormalize(x).astype(np.uint8)
+        # x = dt.denormalize_255(x, np.array(CIFAR10_MEAN).astype(np.float32), np.array(CIFAR10_STD).astype(np.float32)).astype(np.uint8)
         # # And visualise
         # visualise_data(x[:25], y[:25], save_path=fig_path, title=fig_name[:-4], n_rows=5, n_cols=5)
 
+
         test_modules = []
         test_module_levels = []
-        for c in test_corruption.split('-'):
+        for c in test_corruption:
             if c == "Identity":
                 continue
             else:
@@ -401,9 +457,10 @@ def test_modules(experiment, data_root, ckpt_path, save_path, total_n_classes, b
                 test_module_levels.append(module_levels[module_ckpts.index(test_ckpt)])
                 print("Selected module {}".format(test_ckpt))
         tst_loss, tst_acc = modules_loss_and_accuracy(network_blocks, test_modules, test_module_levels, tst_dl, dev)
-        corruption_accs[test_corruption] = tst_acc
-        corruption_losses[test_corruption] = tst_loss
-        print("{}, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment, test_corruption, tst_loss, tst_acc))
+        corruption_accs['-'.join(test_corruption)] = tst_acc
+        corruption_losses['-'.join(test_corruption)] = tst_loss
+        print("{}, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment, '-'.join(test_corruption), tst_loss,
+                                                                   tst_acc))
         sys.stdout.flush()
 
     # Save the results
@@ -415,8 +472,8 @@ def test_modules(experiment, data_root, ckpt_path, save_path, total_n_classes, b
         pickle.dump(corruption_losses, f)
 
 
-def test_autoencoders(experiment, data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers, pin_mem, dev,
-                 check_if_run, total_processes, process):
+def test_autoencoders(experiment, dataset, data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers,
+                      pin_mem, dev, check_if_run, total_processes, process):
     """
     Get the specific checkpoint trained on all corruptions and test on every composition
 
@@ -443,7 +500,12 @@ def test_autoencoders(experiment, data_root, ckpt_path, save_path, total_n_class
         ae_blocks = []
         ae_block_ckpt_names = []
         for corr in ae_corrs:
-            blocks, block_ckpt_names = create_emnist_autoencoder(experiment, corr.split('-'), dev)
+            if dataset == "EMNIST":
+                blocks, block_ckpt_names = create_emnist_autoencoder(experiment, corr.split('-'), dev)
+            elif dataset == "CIFAR":
+                blocks, block_ckpt_names = create_cifar_autoencoder(experiment, corr.split('-'), dev)
+            elif dataset == "FACESCRUB":
+                blocks, block_ckpt_names = create_facescrub_autoencoder(experiment, corr.split('-'), dev)
             ae_blocks.append(blocks)
             ae_block_ckpt_names.append(block_ckpt_names)
         for blocks, block_ckpt_names in zip(ae_blocks, ae_block_ckpt_names):
@@ -454,16 +516,37 @@ def test_autoencoders(experiment, data_root, ckpt_path, save_path, total_n_class
                 sys.stdout.flush()
 
         # Load the identity trained classifier
-        id_clsf_blocks, id_clsf_block_ckpt_names = create_emnist_network(total_n_classes, experiment + "Classifier",
-                                                                         ["Identity"], dev)
+        if dataset == "EMNIST":
+            id_clsf_blocks, id_clsf_block_ckpt_names = create_emnist_network(total_n_classes, experiment + "Classifier",
+                                                                             ["Identity"], dev)
+        elif dataset == "CIFAR":
+            id_clsf_blocks, id_clsf_block_ckpt_names = create_cifar_network(total_n_classes, experiment + "Classifier",
+                                                                             ["Identity"], dev)
+        elif dataset == "FACESCRUB":
+            id_clsf_blocks, id_clsf_block_ckpt_names = create_facescrub_network(total_n_classes,
+                                                                                experiment + "Classifier",
+                                                                                ["Identity"], dev)
         for block, block_ckpt_name in zip(id_clsf_blocks, id_clsf_block_ckpt_names):
             block.load_state_dict(torch.load(os.path.join(ckpt_path, block_ckpt_name)))
             print("Loaded {}".format(block_ckpt_name))
             print("From {}".format(os.path.join(ckpt_path, block_ckpt_name)))
 
         # Load the classifier trained on autoencoder outputs
-        all_clsf_blocks, all_clsf_block_ckpt_names = create_emnist_network(total_n_classes, experiment + "Classifier",
-                                                        [corr.split('-')[0] for corr in ae_corrs] + ["Identity"], dev)
+        if dataset == "EMNIST":
+            all_clsf_blocks, all_clsf_block_ckpt_names = create_emnist_network(total_n_classes,
+                                                                               experiment + "Classifier",
+                                                                               [corr.split('-')[0] for corr in
+                                                                                ae_corrs] + ["Identity"], dev)
+        elif dataset == "CIFAR":
+            all_clsf_blocks, all_clsf_block_ckpt_names = create_cifar_network(total_n_classes,
+                                                                              experiment + "Classifier",
+                                                                              [corr.split('-')[0] for corr in
+                                                                               ae_corrs] + ["Identity"], dev)
+        elif dataset == "FACESCRUB":
+            all_clsf_blocks, all_clsf_block_ckpt_names = create_facescrub_network(total_n_classes,
+                                                                                  experiment + "Classifier",
+                                                                                  [corr.split('-')[0] for corr in
+                                                                                   ae_corrs] + ["Identity"], dev)
         for block, block_ckpt_name in zip(all_clsf_blocks, all_clsf_block_ckpt_names):
             block.load_state_dict(torch.load(os.path.join(ckpt_path, block_ckpt_name)))
             print("Loaded {}".format(block_ckpt_name))
@@ -475,8 +558,8 @@ def test_autoencoders(experiment, data_root, ckpt_path, save_path, total_n_class
     all_clsf_corruption_accs = {}
     all_clsf_corruption_losses = {}
 
-    corruptions = os.listdir(data_root)
-    corruptions = [c for c in corruptions if c != "raw" and c != "corruption_names.pkl"]
+    with open(os.path.join(args.data_root, "corruption_names.pkl"), "rb") as f:
+        corruptions = pickle.load(f)
     corruptions.sort()
     assert len(corruptions) == 167  # hardcoded for EMNIST. 149 EMNIST4. 167 EMNIST5.
     assert total_processes <= len(corruptions)
@@ -499,15 +582,19 @@ def test_autoencoders(experiment, data_root, ckpt_path, save_path, total_n_class
         #                                              n_workers, pin_mem)
 
         identity_path = os.path.join(data_root, "Identity")
-        transforms = [torchvision.transforms.Lambda(lambda im: im.convert('L'))]
-        transforms += [getattr(dt, c)() for c in test_corruption.split('-')]
-        transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='L'))]
-        transforms += [torchvision.transforms.Lambda(lambda im: im.convert('RGB'))]
-        _, _, tst_dl = get_transformed_static_emnist_dataloaders(identity_path, transforms, trained_classes, batch_size,
-                                                                 False, n_workers, pin_mem)
+        if dataset == "EMNIST":
+            transforms = [torchvision.transforms.Lambda(lambda im: im.convert('L'))]
+            transforms += [getattr(dt, c)() for c in test_corruption]
+            transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='L'))]
+            transforms += [torchvision.transforms.Lambda(lambda im: im.convert('RGB'))]
+        else:
+            transforms = [getattr(dt, c)() for c in test_corruption]
+            transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='RGB'))]
+        _, _, tst_dl = get_transformed_static_dataloaders(dataset, identity_path, transforms, trained_classes,
+                                                          batch_size, False, n_workers, pin_mem)
 
         test_ae_blocks = []
-        for c in test_corruption.split('-'):
+        for c in test_corruption:
             if c == "Identity":
                 continue
             else:
@@ -517,17 +604,19 @@ def test_autoencoders(experiment, data_root, ckpt_path, save_path, total_n_class
                         test_ae_blocks.append(blocks)
 
         tst_loss, tst_acc = autoencoders_loss_and_accuracy(test_ae_blocks, id_clsf_blocks, tst_dl, dev)
-        id_clsf_corruption_accs[test_corruption] = tst_acc
-        id_clsf_corruption_losses[test_corruption] = tst_loss
-        print("{} Identity Classifier, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment, test_corruption,
+        id_clsf_corruption_accs['-'.join(test_corruption)] = tst_acc
+        id_clsf_corruption_losses['-'.join(test_corruption)] = tst_loss
+        print("{} Identity Classifier, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment,
+                                                                                       '-'.join(test_corruption),
                                                                                        tst_loss, tst_acc))
         sys.stdout.flush()
 
         tst_loss, tst_acc = autoencoders_loss_and_accuracy(test_ae_blocks, all_clsf_blocks, tst_dl, dev)
-        all_clsf_corruption_accs[test_corruption] = tst_acc
-        all_clsf_corruption_losses[test_corruption] = tst_loss
-        print("{} Joint Classifier, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment, test_corruption,
-                                                                                       tst_loss, tst_acc))
+        all_clsf_corruption_accs['-'.join(test_corruption)] = tst_acc
+        all_clsf_corruption_losses['-'.join(test_corruption)] = tst_loss
+        print("{} Joint Classifier, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment,
+                                                                                    '-'.join(test_corruption),
+                                                                                    tst_loss, tst_acc))
         sys.stdout.flush()
 
     # Save the results
@@ -546,11 +635,12 @@ def test_autoencoders(experiment, data_root, ckpt_path, save_path, total_n_class
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Args to test networks on all corruptions in a given directory.')
-    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/EMNIST5/',
+    parser.add_argument('--dataset', type=str, default='EMNIST', help="which dataset to use")
+    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/',
                         help="path to directory containing directories of different corruptions")
-    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/EMNIST5/',
+    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/',
                         help="path to directory to save checkpoints")
-    parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/results/EMNIST5/',
+    parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/results/',
                         help="path to directory to save test accuracies and losses")
     parser.add_argument('--experiment', type=str, default='CrossEntropy',
                         help="which method to use. CrossEntropy or Contrastive or Modules.")
@@ -569,6 +659,9 @@ if __name__ == "__main__":
     parser.add_argument('--process', type=int, default=0, help="which process is running = SLURM_ARRAY_TASK_ID")
     args = parser.parse_args()
 
+    if args.dataset not in ["EMNIST", "CIFAR", "FACESCRUB"]:
+        raise ValueError("Dataset {} not implemented".format(args.dataset))
+
     # Set seeding
     reset_rngs(seed=246810, deterministic=True)
 
@@ -580,7 +673,10 @@ if __name__ == "__main__":
             raise RuntimeError("GPU unavailable.")
         dev = torch.device('cuda')
 
-    # Create unmade directories
+    # Set up and create unmade directories
+    args.data_root = os.path.join(args.data_root, args.dataset)
+    args.ckpt_path = os.path.join(args.ckpt_path, args.dataset)
+    args.save_path = os.path.join(args.save_path, args.dataset)
     mkdir_p(args.save_path)
 
     print("Running process {} of {}".format(args.process + 1, args.num_processes))
@@ -588,22 +684,23 @@ if __name__ == "__main__":
 
     """
     If running on polestar
-    CUDA_VISIBLE_DEVICES=4 python test_emnist.py --pin-mem --check-if-run --num-processes 10 --process 0
+    CUDA_VISIBLE_DEVICES=4 python test.py --pin-mem --check-if-run --dataset EMNIST --experiment Modules --num-processes 10 --process 0
     """
 
     if "Modules" in args.experiment:
-        test_modules(args.experiment, args.data_root, args.ckpt_path, args.save_path, args.total_n_classes,
-                     args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run, args.num_processes,
-                     args.process)
+        test_modules(args.experiment, args.dataset, args.data_root, args.ckpt_path, args.save_path,
+                     args.total_n_classes, args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run,
+                     args.num_processes, args.process)
     elif "ImgSpace" in args.experiment:
-        test_autoencoders(args.experiment, args.data_root, args.ckpt_path, args.save_path, args.total_n_classes,
-                          args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run, args.num_processes,
-                          args.process)
+        test_autoencoders(args.experiment, args.dataset, args.data_root, args.ckpt_path, args.save_path,
+                          args.total_n_classes, args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run,
+                          args.num_processes, args.process)
     elif args.test_all:
-        test_all(args.experiment, args.data_root, args.ckpt_path, args.save_path, args.total_n_classes, args.batch_size,
-                 args.n_workers, args.pin_mem, dev, args.check_if_run, args.num_processes, args.process)
+        test_all(args.experiment, args.dataset, args.data_root, args.ckpt_path, args.save_path, args.total_n_classes,
+                 args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run, args.num_processes,
+                 args.process)
     else:
-        test_specific(args.experiment, args.data_root, args.ckpt_path, args.save_path, args.total_n_classes,
-                      args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run, args.num_processes,
-                      args.process)
+        test_specific(args.experiment, args.dataset, args.data_root, args.ckpt_path, args.save_path,
+                      args.total_n_classes, args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run,
+                      args.num_processes, args.process)
 

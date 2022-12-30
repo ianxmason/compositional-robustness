@@ -233,29 +233,36 @@ class Swirl(Corruption):
 # ---------------------------------- GENERAL -----------------------------------
 
 
-def normalize(x):
-    """
-    x: (0, 255) --> (-1, 1)
-    """
-    return x * float(2./255.) - 1.
+def denormalize_255(x, mean, std):
+    x[:, 0, :, :] = x[:, 0, :, :] * std[0] + mean[0]
+    x[:, 1, :, :] = x[:, 1, :, :] * std[1] + mean[1]
+    x[:, 2, :, :] = x[:, 2, :, :] * std[2] + mean[2]
+    # After denormalization the values are in range [0, 1]. To visualize them we want [0, 255].
+    return x * 255.
 
-
-def denormalize(x):
-    """
-    x: (-1, 1) --> (0, 255)
-    """
-    return (x + 1.) / 2. * 255.
-
-
-def normalize_0_1(x):
-    """
-    x: (0, 1) --> (-1, 1)
-    """
-    return x * 2. - 1.
-
-
-def denormalize_0_1(x):
-    """
-    x: (-1, 1) --> (0, 1)
-    """
-    return (x + 1.) / 2.
+# def normalize(x):
+#     """
+#     x: (0, 255) --> (-1, 1)
+#     """
+#     return x * float(2./255.) - 1.
+#
+#
+# def denormalize(x):
+#     """
+#     x: (-1, 1) --> (0, 255)
+#     """
+#     return (x + 1.) / 2. * 255.
+#
+#
+# def normalize_0_1(x):
+#     """
+#     x: (0, 1) --> (-1, 1)
+#     """
+#     return x * 2. - 1.
+#
+#
+# def denormalize_0_1(x):
+#     """
+#     x: (-1, 1) --> (0, 1)
+#     """
+#     return (x + 1.) / 2.
