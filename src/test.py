@@ -98,14 +98,15 @@ def autoencoders_loss_and_accuracy(all_ae_blocks, clsf_blocks, dataloader, dev):
             x_tst, y_tst = data_tuple[0].to(dev), data_tuple[1].to(dev)
             features = x_tst
 
-            # Sanity check to comment in for visualising before and after autoencoding
-            # vis_path = '/om2/user/imason/compositions/figs/EMNIST5/visualisations/'
+            # # Sanity check to comment in for visualising before and after autoencoding
+            # vis_path = '/om2/user/imason/compositions/figs/CIFAR/visualisations/'
             # fig_name = "before_ae.png"
             # fig_path = os.path.join(vis_path, fig_name)
             # # Denormalise Images
             # x = features.detach().cpu().numpy()
             # y = y_tst.detach().cpu().numpy()
-            # x = denormalize(x).astype(np.uint8)
+            # x = dt.denormalize_255(x, np.array(CIFAR10_MEAN).astype(np.float32),
+            #                        np.array(CIFAR10_STD).astype(np.float32)).astype(np.uint8)
             # # And visualise
             # visualise_data(x[:25], y[:25], save_path=fig_path, title=fig_name[:-4], n_rows=5, n_cols=5)
 
@@ -113,13 +114,14 @@ def autoencoders_loss_and_accuracy(all_ae_blocks, clsf_blocks, dataloader, dev):
                 for block in ae_blocks:
                     features = block(features)
 
-            # vis_path = '/om2/user/imason/compositions/figs/EMNIST5/visualisations/'
+            # vis_path = '/om2/user/imason/compositions/figs/CIFAR/visualisations/'
             # fig_name = "after_ae.png"
             # fig_path = os.path.join(vis_path, fig_name)
             # # Denormalise Images
             # x = features.detach().cpu().numpy()
             # y = y_tst.detach().cpu().numpy()
-            # x = denormalize(x).astype(np.uint8)
+            # x = dt.denormalize_255(x, np.array(CIFAR10_MEAN).astype(np.float32),
+            #                        np.array(CIFAR10_STD).astype(np.float32)).astype(np.uint8)
             # # And visualise
             # visualise_data(x[:25], y[:25], save_path=fig_path, title=fig_name[:-4], n_rows=5, n_cols=5)
             # print(2/0)  # break execution - only need one batch to check
