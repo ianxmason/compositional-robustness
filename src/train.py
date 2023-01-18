@@ -9,6 +9,9 @@ import torch.nn as nn
 import time
 from data.data_transforms import denormalize_255
 from data.data_loaders import get_multi_static_dataloaders, get_static_dataloaders
+from data.emnist import EMNIST_MEAN, EMNIST_STD
+from data.cifar import CIFAR10_MEAN, CIFAR10_STD
+from data.facescrub import FACESCRUB_MEAN, FACESCRUB_STD
 from lib.networks import create_emnist_network, create_emnist_modules, create_emnist_autoencoder, \
                          create_cifar_network, create_cifar_modules, create_cifar_autoencoder, \
                          create_facescrub_network, create_facescrub_modules, create_facescrub_autoencoder
@@ -697,7 +700,15 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
             # Denormalise Images
             x = x.detach().cpu().numpy()
             y = y.detach().cpu().numpy()
-            x = denormalize(x).astype(np.uint8)
+            if dataset == "EMNIST":
+                x = denormalize_255(x, np.array(EMNIST_MEAN).astype(np.float32),
+                                    np.array(EMNIST_STD).astype(np.float32)).astype(np.uint8)
+            elif dataset == "CIFAR":
+                x = denormalize_255(x, np.array(CIFAR10_MEAN).astype(np.float32),
+                                    np.array(CIFAR10_STD).astype(np.float32)).astype(np.uint8)
+            elif dataset == "FACESCRUB":
+                x = denormalize_255(x, np.array(FACESCRUB_MEAN).astype(np.float32),
+                                    np.array(FACESCRUB_STD).astype(np.float32)).astype(np.uint8)
             # And visualise
             visualise_data(x[:225], y[:225], save_path=fig_path, title=fig_name[:-4], n_rows=15, n_cols=15)
 
