@@ -3,6 +3,7 @@ import torch
 from torch.utils.data import DataLoader, ConcatDataset, RandomSampler
 import torchvision
 from torchvision.transforms import ToTensor, Normalize, RandomCrop, RandomHorizontalFlip
+from lib.custom_transforms import SemiRandomCrop, SemiRandomHorizontalFlip
 from data.emnist import StaticEMNIST, EMNIST_MEAN, EMNIST_STD
 from data.cifar import StaticCIFAR10, CIFAR10_MEAN, CIFAR10_STD
 from data.facescrub import StaticFACESCRUB, FACESCRUB_MEAN, FACESCRUB_STD
@@ -55,7 +56,8 @@ def get_static_dataloaders(dataset, dataset_path, keep_classes, batch_size, shuf
     elif dataset == "CIFAR":
         tr_ds = StaticCIFAR10(dataset_path, keep_classes, which_set='train',
                               transform=torchvision.transforms.Compose(
-                                  [RandomCrop(32, padding=4), RandomHorizontalFlip(),
+                                  [SemiRandomCrop(32, padding=4, seed=1772647822),
+                                   SemiRandomHorizontalFlip(seed=1928562283),
                                    ToTensor(), Normalize(CIFAR10_MEAN, CIFAR10_STD)]))
         val_ds = StaticCIFAR10(dataset_path, keep_classes, which_set='valid',
                                transform=torchvision.transforms.Compose(
@@ -66,7 +68,8 @@ def get_static_dataloaders(dataset, dataset_path, keep_classes, batch_size, shuf
     elif dataset == "FACESCRUB":
         tr_ds = StaticFACESCRUB(dataset_path, keep_classes, which_set='train',
                                 transform=torchvision.transforms.Compose(
-                                    [RandomCrop(100, padding=10), RandomHorizontalFlip(),
+                                    [SemiRandomCrop(100, padding=10, seed=1772647822),
+                                     SemiRandomHorizontalFlip(seed=1928562283),
                                      ToTensor(), Normalize(FACESCRUB_MEAN, FACESCRUB_STD)]))
         val_ds = StaticFACESCRUB(dataset_path, keep_classes, which_set='valid',
                                  transform=torchvision.transforms.Compose(
