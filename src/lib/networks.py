@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torchvision.models import resnet18, inception_v3
+from copy import deepcopy
 
 
 class SimpleConvBlock(nn.Module):
@@ -238,7 +239,7 @@ def create_cifar_network(total_n_classes, experiment, corruption_names, dev):
     network_blocks = []
     network_block_ckpt_names = []
     # Input 3, 32, 32
-    network_blocks.append(nn.Sequential(resnet.conv1, resnet.bn1, resnet.relu).to(dev))
+    network_blocks.append(nn.Sequential(resnet.conv1, resnet.bn1, resnet.relu).to(dev))  # Remove max pooling
     network_block_ckpt_names.append("{}_ResnetBlock1_{}.pt".format(experiment, '-'.join(corruption_names)))
     # 64, 16, 16
     network_blocks.append(resnet.layer1[0].to(dev))
@@ -280,49 +281,58 @@ def create_cifar_modules(experiment, corruption_names, dev):
 
     modules.append(
         nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=5, stride=2, padding=2),
-            nn.Dropout2d(0.1),
-            nn.Conv2d(64, 64, kernel_size=5, stride=2, padding=2),
-            nn.Dropout2d(0.3),
+            nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=2),
+            nn.BatchNorm2d(32),
             nn.ReLU(),
-            nn.ConvTranspose2d(64, 64, kernel_size=5, stride=2, padding=2, output_padding=1),
-            nn.Dropout2d(0.3),
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=2),
+            nn.BatchNorm2d(64),
             nn.ReLU(),
-            nn.ConvTranspose2d(64, 3, kernel_size=5, stride=2, padding=2, output_padding=1),
-            nn.Dropout2d(0.1),   # data has mean 0, std 1. so no activation
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=2),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 64, kernel_size=3, stride=1, padding=2),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=2, output_padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 3, kernel_size=3, stride=1, padding=2)
+            # data has mean 0, std 1. so no activation
         ).to(dev)
     )
     module_ckpt_names.append("{}_ResnetModule0_{}.pt".format(experiment, '-'.join(corruption_names)))  # In image space
 
-    modules.append(resnet.layer1[1].to(dev))
+    modules.append(deepcopy(resnet.layer1[1]).to(dev))
     module_ckpt_names.append("{}_ResnetModule1_{}.pt".format(experiment, '-'.join(corruption_names)))
 
-    modules.append(resnet.layer1[1].to(dev))
+    modules.append(deepcopy(resnet.layer1[1]).to(dev))
     module_ckpt_names.append("{}_ResnetModule2_{}.pt".format(experiment, '-'.join(corruption_names)))
 
-    modules.append(resnet.layer1[1].to(dev))
+    modules.append(deepcopy(resnet.layer1[1]).to(dev))
     module_ckpt_names.append("{}_ResnetModule3_{}.pt".format(experiment, '-'.join(corruption_names)))
 
-    modules.append(resnet.layer2[1].to(dev))
+    modules.append(deepcopy(resnet.layer2[1]).to(dev))
     module_ckpt_names.append("{}_ResnetModule4_{}.pt".format(experiment, '-'.join(corruption_names)))
 
-    modules.append(resnet.layer2[1].to(dev))
+    modules.append(deepcopy(resnet.layer2[1]).to(dev))
     module_ckpt_names.append("{}_ResnetModule5_{}.pt".format(experiment, '-'.join(corruption_names)))
 
-    modules.append(resnet.layer3[1].to(dev))
+    modules.append(deepcopy(resnet.layer3[1]).to(dev))
     module_ckpt_names.append("{}_ResnetModule6_{}.pt".format(experiment, '-'.join(corruption_names)))
 
-    modules.append(resnet.layer3[1].to(dev))
+    modules.append(deepcopy(resnet.layer3[1]).to(dev))
     module_ckpt_names.append("{}_ResnetModule7_{}.pt".format(experiment, '-'.join(corruption_names)))
 
-    modules.append(resnet.layer4[1].to(dev))
+    modules.append(deepcopy(resnet.layer4[1]).to(dev))
     module_ckpt_names.append("{}_ResnetModule8_{}.pt".format(experiment, '-'.join(corruption_names)))
 
     modules.append(
         nn.Sequential(
             nn.Linear(512, 512),
+            nn.BatchNorm1d(512),
             nn.ReLU(),
             nn.Linear(512, 512),
+            nn.BatchNorm1d(512),
             nn.ReLU()
         ).to(dev)
     )
@@ -338,13 +348,20 @@ def create_cifar_autoencoder(experiment, corruption_names, dev):
 
     network_blocks.append(
         nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=5, stride=2, padding=2),
-            nn.Dropout2d(0.1),
-            nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2),
-            nn.Dropout2d(0.3),
+            nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=2),
+            nn.BatchNorm2d(32),
             nn.ReLU(),
-            nn.Conv2d(128, 256, kernel_size=5, stride=2, padding=2),
-            nn.Dropout2d(0.5),
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=2),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=2),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=2),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=2),
+            nn.BatchNorm2d(64),
             nn.ReLU()
         ).to(dev)
     )
@@ -352,13 +369,19 @@ def create_cifar_autoencoder(experiment, corruption_names, dev):
 
     network_blocks.append(
         nn.Sequential(
-            nn.ConvTranspose2d(256, 128, kernel_size=5, stride=2, padding=2, output_padding=1),
-            nn.Dropout2d(0.5),
+            nn.ConvTranspose2d(64, 64, kernel_size=3, stride=1, padding=2),
+            nn.BatchNorm2d(64),
             nn.ReLU(),
-            nn.ConvTranspose2d(128, 64, kernel_size=5, stride=2, padding=2, output_padding=1),
-            nn.Dropout2d(0.3),
+            nn.ConvTranspose2d(64, 64, kernel_size=3, stride=1, padding=2),
+            nn.BatchNorm2d(64),
             nn.ReLU(),
-            nn.ConvTranspose2d(64, 3, kernel_size=5, stride=2, padding=2, output_padding=1)
+            nn.ConvTranspose2d(64, 64, kernel_size=3, stride=1, padding=2),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=2, output_padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 3, kernel_size=3, stride=1, padding=2)
             # data has mean 0, std 1. so no activation
         ).to(dev)
     )
@@ -444,16 +467,23 @@ def create_facescrub_modules(experiment, corruption_names, dev):
 
     modules.append(
         nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=5, stride=2, padding=2),
-            nn.Dropout2d(0.1),
+            nn.Conv2d(3, 32, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=5, stride=2, padding=2),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
             nn.Conv2d(64, 64, kernel_size=5, stride=2, padding=2),
-            nn.Dropout2d(0.3),
+            nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.ConvTranspose2d(64, 64, kernel_size=5, stride=2, padding=2, output_padding=1),
-            nn.Dropout2d(0.3),
+            nn.BatchNorm2d(64),
             nn.ReLU(),
-            nn.ConvTranspose2d(64, 3, kernel_size=5, stride=2, padding=2, output_padding=1),
-            nn.Dropout2d(0.1)  # data has mean 0, std 1. so no activation
+            nn.ConvTranspose2d(64, 32, kernel_size=5, stride=2, padding=2, output_padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 3, kernel_size=5, stride=1, padding=2)
+            # data has mean 0, std 1. so no activation
         ).to(dev)
     )
     module_ckpt_names.append("{}_InceptionModule0_{}.pt".format(experiment, '-'.join(corruption_names)))  # In image space
@@ -461,10 +491,13 @@ def create_facescrub_modules(experiment, corruption_names, dev):
     modules.append(
         nn.Sequential(
             nn.Conv2d(32, 32, kernel_size=5, stride=1, padding=2),
-            nn.Dropout2d(0.3),
+            nn.BatchNorm2d(32),
             nn.ReLU(),
             nn.Conv2d(32, 32, kernel_size=5, stride=1, padding=2),
-            nn.Dropout2d(0.3),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.Conv2d(32, 32, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm2d(32),
             nn.ReLU()
         ).to(dev)
     )
@@ -473,10 +506,13 @@ def create_facescrub_modules(experiment, corruption_names, dev):
     modules.append(
         nn.Sequential(
             nn.Conv2d(32, 32, kernel_size=5, stride=1, padding=2),
-            nn.Dropout2d(0.3),
+            nn.BatchNorm2d(32),
             nn.ReLU(),
             nn.Conv2d(32, 32, kernel_size=5, stride=1, padding=2),
-            nn.Dropout2d(0.3),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.Conv2d(32, 32, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm2d(32),
             nn.ReLU()
         ).to(dev)
     )
@@ -485,10 +521,13 @@ def create_facescrub_modules(experiment, corruption_names, dev):
     modules.append(
         nn.Sequential(
             nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
-            nn.Dropout2d(0.3),
+            nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
-            nn.Dropout2d(0.3),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm2d(64),
             nn.ReLU()
         ).to(dev)
     )
@@ -497,10 +536,13 @@ def create_facescrub_modules(experiment, corruption_names, dev):
     modules.append(
         nn.Sequential(
             nn.Conv2d(80, 80, kernel_size=5, stride=1, padding=2),
-            nn.Dropout2d(0.3),
+            nn.BatchNorm2d(80),
             nn.ReLU(),
             nn.Conv2d(80, 80, kernel_size=5, stride=1, padding=2),
-            nn.Dropout2d(0.3),
+            nn.BatchNorm2d(80),
+            nn.ReLU(),
+            nn.Conv2d(80, 80, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm2d(80),
             nn.ReLU()
         ).to(dev)
     )
@@ -509,10 +551,13 @@ def create_facescrub_modules(experiment, corruption_names, dev):
     modules.append(
         nn.Sequential(
             nn.Conv2d(192, 192, kernel_size=5, stride=1, padding=2),
-            nn.Dropout2d(0.3),
+            nn.BatchNorm2d(192),
             nn.ReLU(),
             nn.Conv2d(192, 192, kernel_size=5, stride=1, padding=2),
-            nn.Dropout2d(0.3),
+            nn.BatchNorm2d(192),
+            nn.ReLU(),
+            nn.Conv2d(192, 192, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm2d(192),
             nn.ReLU()
         ).to(dev)
     )
@@ -521,57 +566,171 @@ def create_facescrub_modules(experiment, corruption_names, dev):
     modules.append(
         nn.Sequential(
             nn.Conv2d(256, 256, kernel_size=5, stride=1, padding=2),
-            nn.Dropout2d(0.3),
+            nn.BatchNorm2d(256),
             nn.ReLU(),
             nn.Conv2d(256, 256, kernel_size=5, stride=1, padding=2),
-            nn.Dropout2d(0.3),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm2d(256),
             nn.ReLU()
         ).to(dev)
     )
     module_ckpt_names.append("{}_InceptionModule6_{}.pt".format(experiment, '-'.join(corruption_names)))
 
-    modules.append(inception.Mixed_5d.to(dev))
+    modules.append(deepcopy(inception.Mixed_5d).to(dev))  # 288
+    # modules.append(
+    #     nn.Sequential(
+    #         nn.Conv2d(288, 288, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(288),
+    #         nn.ReLU(),
+    #         nn.Conv2d(288, 288, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(288),
+    #         nn.ReLU(),
+    #         nn.Conv2d(288, 288, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(288),
+    #         nn.ReLU()
+    #     ).to(dev)
+    # )
     module_ckpt_names.append("{}_InceptionModule7_{}.pt".format(experiment, '-'.join(corruption_names)))
 
-    modules.append(inception.Mixed_5d.to(dev))
+    modules.append(deepcopy(inception.Mixed_5d).to(dev))  # 288
+    # modules.append(
+    #     nn.Sequential(
+    #         nn.Conv2d(288, 288, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(288),
+    #         nn.ReLU(),
+    #         nn.Conv2d(288, 288, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(288),
+    #         nn.ReLU(),
+    #         nn.Conv2d(288, 288, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(288),
+    #         nn.ReLU()
+    #     ).to(dev)
+    # )
     module_ckpt_names.append("{}_InceptionModule8_{}.pt".format(experiment, '-'.join(corruption_names)))
 
-    modules.append(inception.Mixed_6b.to(dev))
+    modules.append(deepcopy(inception.Mixed_6b).to(dev))  # 768
+    # modules.append(
+    #     nn.Sequential(
+    #         nn.Conv2d(768, 768, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(768),
+    #         nn.ReLU(),
+    #         nn.Conv2d(768, 768, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(768),
+    #         nn.ReLU(),
+    #         nn.Conv2d(768, 768, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(768),
+    #         nn.ReLU()
+    #     ).to(dev)
+    # )
     module_ckpt_names.append("{}_InceptionModule9_{}.pt".format(experiment, '-'.join(corruption_names)))
 
-    modules.append(inception.Mixed_6c.to(dev))
+    modules.append(deepcopy(inception.Mixed_6c).to(dev))  # 768
+    # modules.append(
+    #     nn.Sequential(
+    #         nn.Conv2d(768, 768, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(768),
+    #         nn.ReLU(),
+    #         nn.Conv2d(768, 768, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(768),
+    #         nn.ReLU(),
+    #         nn.Conv2d(768, 768, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(768),
+    #         nn.ReLU()
+    #     ).to(dev)
+    # )
     module_ckpt_names.append("{}_InceptionModule10_{}.pt".format(experiment, '-'.join(corruption_names)))
 
-    modules.append(inception.Mixed_6d.to(dev))
+    modules.append(deepcopy(inception.Mixed_6d).to(dev))  # 768
+    # modules.append(
+    #     nn.Sequential(
+    #         nn.Conv2d(768, 768, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(768),
+    #         nn.ReLU(),
+    #         nn.Conv2d(768, 768, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(768),
+    #         nn.ReLU(),
+    #         nn.Conv2d(768, 768, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(768),
+    #         nn.ReLU()
+    #     ).to(dev)
+    # )
     module_ckpt_names.append("{}_InceptionModule11_{}.pt".format(experiment, '-'.join(corruption_names)))
 
-    modules.append(inception.Mixed_6e.to(dev))
+    modules.append(deepcopy(inception.Mixed_6e).to(dev))  # 768
+    # modules.append(
+    #     nn.Sequential(
+    #         nn.Conv2d(768, 768, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(768),
+    #         nn.ReLU(),
+    #         nn.Conv2d(768, 768, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(768),
+    #         nn.ReLU(),
+    #         nn.Conv2d(768, 768, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(768),
+    #         nn.ReLU()
+    #     ).to(dev)
+    # )
     module_ckpt_names.append("{}_InceptionModule12_{}.pt".format(experiment, '-'.join(corruption_names)))
 
-    modules.append(inception.Mixed_6e.to(dev))
+    modules.append(deepcopy(inception.Mixed_6e).to(dev))  # 768
+    # modules.append(
+    #     nn.Sequential(
+    #         nn.Conv2d(768, 768, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(768),
+    #         nn.ReLU(),
+    #         nn.Conv2d(768, 768, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(768),
+    #         nn.ReLU(),
+    #         nn.Conv2d(768, 768, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(768),
+    #         nn.ReLU()
+    #     ).to(dev)
+    # )
     module_ckpt_names.append("{}_InceptionModule13_{}.pt".format(experiment, '-'.join(corruption_names)))
 
-    # Todo: can this be replaced with an inception block?
     modules.append(
         nn.Sequential(
             nn.Conv2d(1280, 1280, kernel_size=5, stride=1, padding=2),
-            nn.Dropout2d(0.3),
+            nn.BatchNorm2d(1280),
             nn.ReLU(),
             nn.Conv2d(1280, 1280, kernel_size=5, stride=1, padding=2),
-            nn.Dropout2d(0.3),
+            nn.BatchNorm2d(1280),
+            nn.ReLU(),
+            nn.Conv2d(1280, 1280, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm2d(1280),
             nn.ReLU()
         ).to(dev)
     )
     module_ckpt_names.append("{}_InceptionModule14_{}.pt".format(experiment, '-'.join(corruption_names)))
 
-    modules.append(inception.Mixed_7c.to(dev))
+    modules.append(deepcopy(inception.Mixed_7c).to(dev))  # 2048
+    # modules.append(
+    #     nn.Sequential(
+    #         nn.Conv2d(2048, 2048, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(2048),
+    #         nn.ReLU(),
+    #         nn.Conv2d(2048, 2048, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(2048),
+    #         nn.ReLU(),
+    #         nn.Conv2d(2048, 2048, kernel_size=5, stride=1, padding=2),
+    #         nn.BatchNorm2d(2048),
+    #         nn.ReLU()
+    #     ).to(dev)
+    # )
     module_ckpt_names.append("{}_InceptionModule15_{}.pt".format(experiment, '-'.join(corruption_names)))
 
     modules.append(
         nn.Sequential(
             nn.Linear(2048, 2048),
+            nn.BatchNorm1d(2048),
             nn.ReLU(),
             nn.Linear(2048, 2048),
+            nn.BatchNorm1d(2048),
+            nn.ReLU(),
+            nn.Linear(2048, 2048),
+            nn.BatchNorm1d(2048),
             nn.ReLU()
         ).to(dev)
     )
@@ -585,15 +744,40 @@ def create_facescrub_autoencoder(experiment, corruption_names, dev):
     network_blocks = []
     network_block_ckpt_names = []
 
+    # nn.Conv2d(3, 32, kernel_size=5, stride=1, padding=2),
+    # nn.BatchNorm2d(32),
+    # nn.ReLU(),
+    # nn.Conv2d(32, 64, kernel_size=5, stride=2, padding=2),
+    # nn.BatchNorm2d(64),
+    # nn.ReLU(),
+    # nn.Conv2d(64, 64, kernel_size=5, stride=2, padding=2),
+    # nn.BatchNorm2d(64),
+    # nn.ReLU(),
+
+
+    # nn.ConvTranspose2d(64, 64, kernel_size=5, stride=2, padding=2, output_padding=1),
+    # nn.BatchNorm2d(64),
+    # nn.ReLU(),
+    # nn.ConvTranspose2d(64, 32, kernel_size=5, stride=2, padding=2, output_padding=1),
+    # nn.BatchNorm2d(32),
+    # nn.ReLU(),
+    # nn.ConvTranspose2d(32, 3, kernel_size=5, stride=1, padding=2)
+
     network_blocks.append(
         nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=5, stride=2, padding=2),
-            nn.Dropout2d(0.1),
+            # nn.Dropout2d(0.1),
             nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2),
-            nn.Dropout2d(0.3),
+            # nn.Dropout2d(0.3),
             nn.ReLU(),
             nn.Conv2d(128, 256, kernel_size=5, stride=2, padding=2),
-            nn.Dropout2d(0.5),
+            # nn.Dropout2d(0.5),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, kernel_size=5, stride=2, padding=2),
+            # nn.Dropout2d(0.5),
+            nn.ReLU(),
+            nn.Conv2d(256, 512, kernel_size=5, stride=2, padding=2),
+            # nn.Dropout2d(0.5),
             nn.ReLU()
         ).to(dev)
     )
@@ -601,11 +785,17 @@ def create_facescrub_autoencoder(experiment, corruption_names, dev):
 
     network_blocks.append(
         nn.Sequential(
+            nn.ConvTranspose2d(512, 256, kernel_size=5, stride=2, padding=2),
+            # nn.Dropout2d(0.5),
+            nn.ReLU(),
+            nn.ConvTranspose2d(256, 256, kernel_size=5, stride=2, padding=2),
+            # nn.Dropout2d(0.5),
+            nn.ReLU(),
             nn.ConvTranspose2d(256, 128, kernel_size=5, stride=2, padding=2),
-            nn.Dropout2d(0.5),
+            # nn.Dropout2d(0.5),
             nn.ReLU(),
             nn.ConvTranspose2d(128, 64, kernel_size=5, stride=2, padding=2, output_padding=1),
-            nn.Dropout2d(0.3),
+            # nn.Dropout2d(0.3),
             nn.ReLU(),
             nn.ConvTranspose2d(64, 3, kernel_size=5, stride=2, padding=2, output_padding=1)
             # data has mean 0, std 1. so no activation

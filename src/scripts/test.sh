@@ -47,8 +47,8 @@ do
               python test.py --pin-mem \
                              --check-if-run \
                              --test-all \
-                             --dataset "FACESCRUB" \
-                             --total-n-classes 388 \
+                             --dataset "CIFAR" \
+                             --total-n-classes 10 \
                              --experiment "ImgSpace" \
                              --num-processes $(($SLURM_ARRAY_TASK_COUNT * $jobs_per_gpu)) \
                              --process $(($SLURM_ARRAY_TASK_ID * $jobs_per_gpu + $number)) &

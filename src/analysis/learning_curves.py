@@ -30,16 +30,21 @@ for corr in elem_corrs:
     axs.set_xlabel("Training Iteration")
     axs.set_ylabel("Accuracy (%)")
 
-    for level in mod_levels:
+    if len(mod_levels) < 10:
+        colors = plt.get_cmap('tab10')(np.linspace(0, 1, len(mod_levels)))
+    else:
+        colors = plt.get_cmap('tab20')(np.linspace(0, 1, len(mod_levels)))
+    for i, level in enumerate(mod_levels):
         level_values = []
         for k, v in train_accs.items():
-            if "Level-{}".format(level) in k:
+            if "Level-{}_".format(level) in k:
                 level_values.append(v)
         level_values = np.array(level_values)
         level_mean = np.mean(level_values, axis=0)
         level_std = np.std(level_values, axis=0)
-        axs.plot(range(1, len(level_mean) + 1), level_mean, label="Level {}".format(level))
-        axs.fill_between(range(1, len(level_mean) + 1), level_mean - level_std, level_mean + level_std, alpha=0.2)
+        axs.plot(range(1, len(level_mean) + 1), level_mean, label="Level {}".format(level), color=colors[i])
+        axs.fill_between(range(1, len(level_mean) + 1), level_mean - level_std, level_mean + level_std, alpha=0.2,
+                         color=colors[i])
 
     axs.set_xlim(1, len(level_mean))
     axs.legend(loc='upper left')

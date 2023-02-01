@@ -5,10 +5,11 @@ import argparse
 import os
 import pickle
 import torch
+import torchvision
 import torch.nn as nn
 import time
-from data.data_transforms import denormalize_255
-from data.data_loaders import get_multi_static_dataloaders, get_static_dataloaders
+import data.data_transforms as dt
+from data.data_loaders import get_multi_static_dataloaders, get_static_dataloaders, get_transformed_static_dataloaders
 from data.emnist import EMNIST_MEAN, EMNIST_STD
 from data.cifar import CIFAR10_MEAN, CIFAR10_STD
 from data.facescrub import FACESCRUB_MEAN, FACESCRUB_STD
@@ -17,6 +18,8 @@ from lib.networks import create_emnist_network, create_emnist_modules, create_em
                          create_facescrub_network, create_facescrub_modules, create_facescrub_autoencoder
 from lib.early_stopping import EarlyStopping
 from lib.contrastive_loss import ContrastiveLayerLoss
+from torchvision.transforms import RandomCrop, RandomHorizontalFlip
+from lib.custom_transforms import SemiRandomCrop, SemiRandomHorizontalFlip
 from lib.forwards_passes import *
 from lib.utils import *
 
@@ -30,10 +33,23 @@ def train_identity_network(network_blocks, network_block_ckpt_names, dataset, da
     print("Logging file created for experiment {} to train on Identity".format(experiment))
 
     # Data Set Up
-    corruption_path = os.path.join(data_root, "Identity")
+    identity_path = os.path.join(data_root, "Identity")
     train_classes = list(range(total_n_classes))
-    trn_dl, val_dl, _ = get_static_dataloaders(dataset, corruption_path, train_classes, batch_size, True, n_workers,
-                                               pin_mem)
+    if dataset == "EMNIST":  # Black and white images. No augmentation.
+        transforms = []
+    elif dataset == "CIFAR":  # Color images. Augmentation. Note validation data also augmented.
+        transforms = [RandomCrop(32, padding=4), RandomHorizontalFlip()]
+    elif dataset == "FACESCRUB":  # Color images. Augmentation. Note validation data also augmented.
+        transforms = [RandomCrop(100, padding=10), RandomHorizontalFlip()]
+    trn_dl, val_dl, _ = get_transformed_static_dataloaders(dataset, identity_path, transforms,
+                                                           train_classes, batch_size, True, n_workers,
+                                                           pin_mem)
+
+    # OLD VERSION
+    # corruption_path = os.path.join(data_root, "Identity")
+    # train_classes = list(range(total_n_classes))
+    # trn_dl, val_dl, _ = get_static_dataloaders(dataset, corruption_path, train_classes, batch_size, True, n_workers,
+    #                                            pin_mem)
 
     # Network & Optimizer Set Up
     all_parameters = []
@@ -166,11 +182,36 @@ def train_classifiers(dataset, data_root, ckpt_path, logging_path, experiment, t
     generators = [torch.Generator(device='cpu').manual_seed(2147483647) for _ in range(len(corruption_paths))]
     single_corr_bs = batch_size // len(corruption_paths)
     trn_dls, val_dls = [], []
-    for corruption_path, generator in zip(corruption_paths, generators):
-        trn_dl, val_dl, _ = get_static_dataloaders(dataset, corruption_path, train_classes, single_corr_bs,
-                                                   True, n_workers, pin_mem, fixed_generator=generator)
+
+    identity_path = os.path.join(data_root, "Identity")
+    for elem_corr, generator in zip(elemental_corruptions + ["Identity"], generators):
+        if dataset == "EMNIST":  # Black and white images. No augmentation.
+            transforms = [torchvision.transforms.Lambda(lambda im: im.convert('L'))]
+            transforms += [getattr(dt, elem_corr)()]
+            transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='L'))]
+            transforms += [torchvision.transforms.Lambda(lambda im: im.convert('RGB'))]
+        elif dataset == "CIFAR":  # Color images. Augmentation. Note validation data also augmented.
+            transforms = [SemiRandomCrop(32, padding=4, seed=1772647822),
+                          SemiRandomHorizontalFlip(seed=1928562283)]
+            transforms += [getattr(dt, elem_corr)()]
+            transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='RGB'))]
+        elif dataset == "FACESCRUB":  # Color images. Augmentation. Note validation data also augmented.
+            transforms = [SemiRandomCrop(100, padding=10, seed=1772647822),
+                          SemiRandomHorizontalFlip(seed=1928562283)]
+            transforms += [getattr(dt, elem_corr)()]
+            transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='RGB'))]
+        trn_dl, val_dl, _ = get_transformed_static_dataloaders(dataset, identity_path, transforms,
+                                                               train_classes, single_corr_bs, True, n_workers,
+                                                               pin_mem, fixed_generator=generator)
         trn_dls.append(trn_dl)
         val_dls.append(val_dl)
+
+    # OLD VERSION
+    # for corruption_path, generator in zip(corruption_paths, generators):
+    #     trn_dl, val_dl, _ = get_static_dataloaders(dataset, corruption_path, train_classes, single_corr_bs,
+    #                                                True, n_workers, pin_mem, fixed_generator=generator)
+    #     trn_dls.append(trn_dl)
+    #     val_dls.append(val_dl)
 
     # Create Network
     if dataset == "EMNIST":
@@ -649,11 +690,36 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
             generators = [torch.Generator(device='cpu').manual_seed(2147483647) for _ in range(len(corruption_paths))]
             single_corr_bs = batch_size // len(corruption_names)
             trn_dls, val_dls = [], []
-            for corruption_path, generator in zip(corruption_paths, generators):
-                trn_dl, val_dl, _ = get_static_dataloaders(dataset, corruption_path, train_classes, single_corr_bs,
-                                                           True, n_workers, pin_mem, fixed_generator=generator)
+
+            identity_path = os.path.join(data_root, "Identity")
+            for corruption_name, generator in zip(corruption_names, generators):
+                if dataset == "EMNIST":  # Black and white images. No augmentation.
+                    transforms = [torchvision.transforms.Lambda(lambda im: im.convert('L'))]
+                    transforms += [getattr(dt, corruption_name)()]
+                    transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='L'))]
+                    transforms += [torchvision.transforms.Lambda(lambda im: im.convert('RGB'))]
+                elif dataset == "CIFAR":  # Color images. Augmentation. Note validation data also augmented.
+                    transforms = [SemiRandomCrop(32, padding=4, seed=1772647822),
+                                  SemiRandomHorizontalFlip(seed=1928562283)]
+                    transforms += [getattr(dt, corruption_name)()]
+                    transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='RGB'))]
+                elif dataset == "FACESCRUB":  # Color images. Augmentation. Note validation data also augmented.
+                    transforms = [SemiRandomCrop(100, padding=10, seed=1772647822),
+                                  SemiRandomHorizontalFlip(seed=1928562283)]
+                    transforms += [getattr(dt, corruption_name)()]
+                    transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='RGB'))]
+                trn_dl, val_dl, _ = get_transformed_static_dataloaders(dataset, identity_path, transforms,
+                                                                       train_classes, single_corr_bs, True, n_workers,
+                                                                       pin_mem, fixed_generator=generator)
                 trn_dls.append(trn_dl)
                 val_dls.append(val_dl)
+
+            # OLD VERSION
+            # for corruption_path, generator in zip(corruption_paths, generators):
+            #     trn_dl, val_dl, _ = get_static_dataloaders(dataset, corruption_path, train_classes, single_corr_bs,
+            #                                                True, n_workers, pin_mem, fixed_generator=generator)
+            #     trn_dls.append(trn_dl)
+            #     val_dls.append(val_dl)
 
             if "Modules" in experiment:
                 if len(corruption_names) != 2:
@@ -701,13 +767,13 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
             x = x.detach().cpu().numpy()
             y = y.detach().cpu().numpy()
             if dataset == "EMNIST":
-                x = denormalize_255(x, np.array(EMNIST_MEAN).astype(np.float32),
+                x = dt.denormalize_255(x, np.array(EMNIST_MEAN).astype(np.float32),
                                     np.array(EMNIST_STD).astype(np.float32)).astype(np.uint8)
             elif dataset == "CIFAR":
-                x = denormalize_255(x, np.array(CIFAR10_MEAN).astype(np.float32),
+                x = dt.denormalize_255(x, np.array(CIFAR10_MEAN).astype(np.float32),
                                     np.array(CIFAR10_STD).astype(np.float32)).astype(np.uint8)
             elif dataset == "FACESCRUB":
-                x = denormalize_255(x, np.array(FACESCRUB_MEAN).astype(np.float32),
+                x = dt.denormalize_255(x, np.array(FACESCRUB_MEAN).astype(np.float32),
                                     np.array(FACESCRUB_STD).astype(np.float32)).astype(np.uint8)
             # And visualise
             visualise_data(x[:225], y[:225], save_path=fig_path, title=fig_name[:-4], n_rows=15, n_cols=15)
