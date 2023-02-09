@@ -9,6 +9,7 @@ from scipy.ndimage import grey_erosion, grey_dilation, gaussian_filter, gaussian
 import scipy.ndimage
 import torch
 import numpy as np
+import warnings
 from matplotlib.image import imread
 import skimage as sk
 from skimage.filters import gaussian
@@ -93,7 +94,10 @@ class GaussianBlur(Corruption):
         # some datasets have images (N,N) and others are (N,N,3). The current implementation allows for this
         # https://scikit-image.org/docs/stable/api/skimage.filters.html#skimage.filters.gaussian
         # https://github.com/scikit-image/scikit-image/blob/v0.19.2/skimage/_shared/filters.py#L16-L137
-        x = gaussian(np.array(x) / 255., sigma=c)
+        # But this does raise a warning which we suppress.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            x = gaussian(np.array(x) / 255., sigma=c)
         x = np.clip(x, 0, 1) * 255
         return x.astype(np.float32)
 

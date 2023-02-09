@@ -61,7 +61,7 @@ def train_identity_network(network_blocks, network_block_ckpt_names, dataset, da
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=max_epochs)
 
     # Early Stopping Set Up
-    es_ckpt_paths = [os.path.join(ckpt_path, "es_ckpt_{}.pt".format(block_ckpt_name)) for block_ckpt_name in
+    es_ckpt_paths = [os.path.join(ckpt_path, "es_ckpt_{}".format(block_ckpt_name)) for block_ckpt_name in
                      network_block_ckpt_names]
     early_stoppings = [EarlyStopping(patience=max_epochs, path=es_ckpt_path, trace_func=id_logger.info) for
                        es_ckpt_path in es_ckpt_paths]
@@ -245,14 +245,14 @@ def train_classifiers(dataset, data_root, ckpt_path, logging_path, experiment, t
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=max_epochs)
 
     # Early Stopping Set Up
-    es_ckpt_paths = [os.path.join(ckpt_path, "es_ckpt_{}.pt".format(block_ckpt_name)) for block_ckpt_name in
+    es_ckpt_paths = [os.path.join(ckpt_path, "es_ckpt_{}".format(block_ckpt_name)) for block_ckpt_name in
                      network_block_ckpt_names]
     early_stoppings = [EarlyStopping(patience=max_epochs, path=es_ckpt_path, trace_func=clsf_logger.info) for
                        es_ckpt_path in es_ckpt_paths]
     early_stoppings[0].verbose = True
     assert len(early_stoppings) == len(network_blocks)
-    val_freq = len(trn_dls[0]) // len(corruption_paths)
-    clsf_logger.info("Validation frequency: every {} batches".format(val_freq))
+    # val_freq = len(trn_dls[0]) // len(corruption_paths)
+    # clsf_logger.info("Validation frequency: every {} batches".format(val_freq))
 
     # Loss Function Set Up
     cross_entropy_loss_fn = nn.CrossEntropyLoss()
@@ -299,46 +299,49 @@ def train_classifiers(dataset, data_root, ckpt_path, logging_path, experiment, t
             epoch_acc += acc
             loss.backward()
             optim.step()
-
-            if i % val_freq == 0:
-                # Validation
-                for block in network_blocks:
-                    block.eval()
-                valid_loss = 0.0
-                valid_acc = 0.0
-                with torch.no_grad():
-                    for val_data_tuples in zip(*val_dls):
-                        x_val, y_val = generate_batch(val_data_tuples, dev)
-                        decoded_x = []
-                        for j, elem_corr in enumerate(elemental_corruptions + ["Identity"]):
-                            x_ae = x_val[j * single_corr_bs:(j + 1) * single_corr_bs, :, :, :]
-                            if elem_corr != "Identity":
-                                for block in corruption_ae_blocks[j]:
-                                    x_ae = block(x_ae)
-                            decoded_x.append(x_ae)
-                        x_val = torch.cat(decoded_x, dim=0)
-                        loss, acc = cross_entropy_forwards_pass(network_blocks, x_val, y_val, cross_entropy_loss_fn,
-                                                                accuracy_fn)
-                        valid_loss += loss.item()
-                        valid_acc += acc
-                clsf_logger.info("Validation CE loss {:6.4f}".format(valid_loss / len(val_dls[0])))
-                clsf_logger.info("Validation accuracy {:6.3f}".format(valid_acc / len(val_dls[0])))
-
-                # Early Stopping
-                for es, block in zip(early_stoppings, network_blocks):
-                    es(valid_loss / len(val_dls[0]), block)  # ES on loss
-                if early_stoppings[0].early_stop:
-                    clsf_logger.info("Early stopping")
-                    break
-                for block in network_blocks:
-                    block.train()
-        scheduler.step()
-        if early_stoppings[0].early_stop:
-            break
+        # Logging
         results = [epoch,
                    epoch_loss / len(trn_dls[0]),
                    epoch_acc / len(trn_dls[0])]
         clsf_logger.info("Classifier. Epoch {}. Avg CE train loss {:6.4f}. Avg train acc {:6.3f}.".format(*results))
+
+        # Validation
+        for block in network_blocks:
+            block.eval()
+        valid_loss = 0.0
+        valid_acc = 0.0
+        with torch.no_grad():
+            for val_data_tuples in zip(*val_dls):
+                x_val, y_val = generate_batch(val_data_tuples, dev)
+                decoded_x = []
+                for j, elem_corr in enumerate(elemental_corruptions + ["Identity"]):
+                    x_ae = x_val[j * single_corr_bs:(j + 1) * single_corr_bs, :, :, :]
+                    if elem_corr != "Identity":
+                        for block in corruption_ae_blocks[j]:
+                            x_ae = block(x_ae)
+                    decoded_x.append(x_ae)
+                x_val = torch.cat(decoded_x, dim=0)
+                loss, acc = cross_entropy_forwards_pass(network_blocks, x_val, y_val, cross_entropy_loss_fn,
+                                                        accuracy_fn)
+                valid_loss += loss.item()
+                valid_acc += acc
+        clsf_logger.info("Validation CE loss {:6.4f}".format(valid_loss / len(val_dls[0])))
+        clsf_logger.info("Validation accuracy {:6.3f}".format(valid_acc / len(val_dls[0])))
+
+        # Learning Rate Scheduler
+        scheduler.step()
+
+        # Early Stopping
+        for es, block in zip(early_stoppings, network_blocks):
+            es(valid_loss / len(val_dls[0]), block)  # ES on loss
+        if early_stoppings[0].early_stop:
+            clsf_logger.info("Early stopping")
+            break
+        # for block in network_blocks:
+        #     block.train()
+        #
+        # if early_stoppings[0].early_stop:
+        #     break
 
     # Save model
     clsf_logger.info("Loading early stopped checkpoints")
@@ -567,7 +570,7 @@ def get_module_abstraction_level(experiment, network_blocks, dataset, trn_dls, v
 
 def find_module_abstraction_level(network_blocks, dataset, trn_dls, val_dls, logging_path, corruption_names, lr,
                                   cross_entropy_loss_fn, accuracy_fn, contrastive_loss_fn, weight, single_corr_bs, dev,
-                                  num_iterations=50, num_repeats=5):
+                                  num_iterations=250, num_repeats=3):
     """
     Tries training the network with modules at every level of abstraction. Trains for num_iterations update steps.
     Repeats the experiment num_repeats times. Returns the level of abstraction that gives the best mean performance.
@@ -741,8 +744,9 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
                         block.load_state_dict(torch.load(os.path.join(ckpt_path, block_ckpt_name)))
                         block.eval()
                     logger.info("Loaded identity network from {}".format(ckpt_path))
-                elif os.path.exists(os.path.join(ckpt_path, "es_ckpt_{}.pt".format(network_block_ckpt_names[0]))):
-                    raise RuntimeError("Early stopping checkpoint found. Training may be running in another process.")
+                elif "Contrast" not in corruption_names:
+                    raise RuntimeError("Contrast not in corruptions. "
+                                       "Identity training may be running in another process.")
                 else:
                     logger.info("Identity network not found. Training it now.")
                     _ = train_identity_network(network_blocks, network_block_ckpt_names, dataset, data_root,
@@ -811,14 +815,15 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
             for block in network_blocks:
                 all_parameters += list(block.parameters())
             # optim = torch.optim.Adam(all_parameters, lr) # Todo: used for EMNIST, test without
+            initial_epoch = 0
             optim = torch.optim.SGD(all_parameters, lr, momentum=0.9, weight_decay=5e-4)
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=max_epochs)
 
             # Early Stopping Set Up
-            es_ckpt_paths = [os.path.join(ckpt_path, "es_ckpt_{}.pt".format(block_ckpt_name)) for block_ckpt_name in
+            es_ckpt_paths = [os.path.join(ckpt_path, "es_ckpt_{}".format(block_ckpt_name)) for block_ckpt_name in
                              network_block_ckpt_names]
-            early_stoppings = [EarlyStopping(patience=max_epochs, path=es_ckpt_path, trace_func=logger.info) for
-                               es_ckpt_path in es_ckpt_paths]
+            early_stoppings = [EarlyStopping(patience=max_epochs, path=es_ckpt_path, trace_func=logger.info,
+                                             save_full_state=True) for es_ckpt_path in es_ckpt_paths]
             early_stoppings[0].verbose = True
             assert len(early_stoppings) == len(network_blocks)
             # Check if training has already completed for the corruption(s) in question.
@@ -826,6 +831,15 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
                 print("Checkpoint already exists at {} \nSkipping training on corruption(s): {}".format(
                     os.path.join(ckpt_path, network_block_ckpt_names[0]), corruption_names))
                 continue
+            # Check if training is partially completed by presence of early stopping checkpoints.
+            if os.path.exists(es_ckpt_paths[0]):
+                print("Early stopping checkpoint already exists at {} "
+                      "\nResuming training from checkpoint".format(es_ckpt_paths[0]))
+                for es, block in zip(early_stoppings, network_blocks):
+                    initial_epoch = es.load_from_checkpoint(block, optim, scheduler, dev)
+                initial_epoch += 1
+                print("Resuming training from epoch {}".format(initial_epoch))
+                print("Resuming training with learning rate {}".format(optim.param_groups[0]['lr']))
         elif "Modules" in experiment:
             logger.info("Finding Module Level of Abstraction")
             module_level = get_module_abstraction_level(experiment, network_blocks, dataset, trn_dls, val_dls,
@@ -843,13 +857,14 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
             module = modules[module_level]
             module_ckpt_name = module_ckpt_names[module_level]
             # optim = torch.optim.Adam(module.parameters(), lr)  # Todo: used for EMNIST, test without
+            initial_epoch = 0
             optim = torch.optim.SGD(module.parameters(), lr, momentum=0.9, weight_decay=5e-4)
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=max_epochs)
 
             # Early Stopping Set Up
-            es_ckpt_paths = [os.path.join(ckpt_path, "es_ckpt_{}.pt".format(module_ckpt_name))]
-            early_stoppings = [EarlyStopping(patience=max_epochs, path=es_ckpt_path, trace_func=logger.info) for
-                               es_ckpt_path in es_ckpt_paths]
+            es_ckpt_paths = [os.path.join(ckpt_path, "es_ckpt_{}".format(module_ckpt_name))]
+            early_stoppings = [EarlyStopping(patience=max_epochs, path=es_ckpt_path, trace_func=logger.info,
+                                             save_full_state=True) for es_ckpt_path in es_ckpt_paths]
             early_stoppings[0].verbose = True
             assert len(early_stoppings) == 1
             # Check if training has already completed for the corruption(s) in question.
@@ -857,6 +872,14 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
                 print("Checkpoint already exists at {} \nSkipping training on corruption(s): {}".format(
                     os.path.join(ckpt_path, module_ckpt_name), corruption_names))
                 continue
+            # Check if training is partially completed by presence of early stopping checkpoints.
+            if os.path.exists(es_ckpt_paths[0]):
+                print("Early stopping checkpoint already exists at {} "
+                      "\nResuming training from checkpoint".format(es_ckpt_paths[0]))
+                initial_epoch = early_stoppings[0].load_from_checkpoint(module, optim, scheduler, dev)
+                initial_epoch += 1
+                print("Resuming training from epoch {}".format(initial_epoch))
+                print("Resuming training with learning rate {}".format(optim.param_groups[0]['lr']))
         elif "ImgSpace" in experiment:
             if dataset == "EMNIST":
                 network_blocks, network_block_ckpt_names = create_emnist_autoencoder(experiment, corruption_names, dev)
@@ -870,14 +893,15 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
             for block in network_blocks:
                 all_parameters += list(block.parameters())
             # optim = torch.optim.Adam(all_parameters, lr)  # Todo: used for EMNIST, test without
+            initial_epoch = 0
             optim = torch.optim.SGD(all_parameters, lr, momentum=0.9, weight_decay=5e-4)
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=max_epochs)
 
             # Early Stopping Set Up
-            es_ckpt_paths = [os.path.join(ckpt_path, "es_ckpt_{}.pt".format(block_ckpt_name)) for block_ckpt_name in
+            es_ckpt_paths = [os.path.join(ckpt_path, "es_ckpt_{}".format(block_ckpt_name)) for block_ckpt_name in
                              network_block_ckpt_names]
-            early_stoppings = [EarlyStopping(patience=max_epochs, path=es_ckpt_path, trace_func=logger.info) for
-                               es_ckpt_path in es_ckpt_paths]
+            early_stoppings = [EarlyStopping(patience=max_epochs, path=es_ckpt_path, trace_func=logger.info,
+                                             save_full_state=True) for es_ckpt_path in es_ckpt_paths]
             early_stoppings[0].verbose = True
             assert len(early_stoppings) == len(network_blocks)
             # Check if training has already completed for the corruption(s) in question.
@@ -885,15 +909,24 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
                 print("Checkpoint already exists at {} \nSkipping training on corruption(s): {}".format(
                     os.path.join(ckpt_path, network_block_ckpt_names[0]), corruption_names))
                 continue
+            # Check if training is partially completed by presence of early stopping checkpoints.
+            if os.path.exists(es_ckpt_paths[0]):
+                print("Early stopping checkpoint already exists at {} "
+                      "\nResuming training from checkpoint".format(es_ckpt_paths[0]))
+                for es, block in zip(early_stoppings, network_blocks):
+                    initial_epoch = es.load_from_checkpoint(block, optim, scheduler, dev)
+                initial_epoch += 1
+                print("Resuming training from epoch {}".format(initial_epoch))
+                print("Resuming training with learning rate {}".format(optim.param_groups[0]['lr']))
         else:
             raise NotImplementedError("Experiment {} not implemented".format(experiment))
 
         # We want to check for early stopping after approximately equal number of batches:
-        val_freq = len(trn_dls[0]) // len(corruption_names)
-        logger.info("Validation frequency: every {} batches".format(val_freq))
+        # val_freq = len(trn_dls[0]) // len(corruption_names)
+        # logger.info("Validation frequency: every {} batches".format(val_freq))
 
         # Train Loop
-        for epoch in range(max_epochs):
+        for epoch in range(initial_epoch, max_epochs):
             # Training
             if "Modules" not in experiment:
                 for block in network_blocks:
@@ -903,6 +936,9 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
             epoch_ce_loss = 0.0
             epoch_ctv_loss = 0.0
             epoch_acc = 0.0
+
+            print("Epoch: {}".format(epoch))
+            print("Learning rate: {}".format(optim.param_groups[0]['lr']))
 
             # # Time batches
             # start_time = time.time()
@@ -946,79 +982,7 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
                 # logger.info("Batch {} of {} in epoch {} took {:.2f} seconds.".format(i, len(trn_dl), epoch,
                 #                                                                time.time() - start_time))
                 # start_time = time.time()
-
-                if i % val_freq == 0:
-                    # Validation
-                    if "Modules" not in experiment:
-                        for block in network_blocks:
-                            block.eval()
-                    else:
-                        module.eval()
-                    valid_ce_loss = 0.0
-                    valid_ctv_loss = 0.0
-                    valid_total_loss = 0.0
-                    valid_acc = 0.0
-                    with torch.no_grad():
-                        for val_data_tuples in zip(*val_dls):
-                            x_val, y_val = generate_batch(val_data_tuples, dev)
-                            if "CrossEntropy" in experiment:
-                                ce_loss, acc = cross_entropy_forwards_pass(network_blocks, x_val, y_val,
-                                                                           cross_entropy_loss_fn, accuracy_fn)
-                                valid_ce_loss += ce_loss.item()
-                                valid_total_loss += ce_loss.item()
-                                valid_acc += acc
-                            elif "Contrastive" in experiment:
-                                ce_loss, ctv_loss, acc = contrastive_forwards_pass(network_blocks, x_val, y_val,
-                                                                                   cross_entropy_loss_fn, accuracy_fn,
-                                                                                   contrastive_loss_fn, contrastive_levels,
-                                                                                   weight, single_corr_bs)
-                                valid_ce_loss += ce_loss.item()
-                                valid_ctv_loss += ctv_loss.item()
-                                valid_total_loss += ce_loss.item() + ctv_loss.item()
-                                valid_acc += acc
-                            elif "Modules" in experiment:
-                                ce_loss, ctv_loss, acc = modules_forwards_pass(network_blocks, module, module_level,
-                                                                               x_val, y_val,
-                                                                               cross_entropy_loss_fn, accuracy_fn,
-                                                                               contrastive_loss_fn,
-                                                                               weight, single_corr_bs)
-                                valid_ce_loss += ce_loss.item()
-                                valid_ctv_loss += ctv_loss.item()
-                                valid_total_loss += ce_loss.item() + ctv_loss.item()
-                                valid_acc += acc
-                            elif "ImgSpace" in experiment:
-                                mse_loss = autoencoder_forwards_pass(network_blocks, x_val, mse_loss_fn, single_corr_bs)
-                                valid_ce_loss += mse_loss.item()
-                                valid_total_loss += mse_loss.item()
-                            else:
-                                raise NotImplementedError("Experiment {} not implemented".format(experiment))
-                    if "CrossEntropy" in experiment:
-                        logger.info("Validation CE loss {:6.4f}".format(valid_ce_loss / len(val_dls[0])))
-                        logger.info("Validation accuracy {:6.3f}".format(valid_acc / len(val_dls[0])))
-                    elif "Contrastive" in experiment or "Modules" in experiment:
-                        logger.info("Validation CE loss {:6.4f}".format(valid_ce_loss / len(val_dls[0])))
-                        logger.info("Validation contrastive loss {:6.4f}".format(valid_ctv_loss / len(val_dls[0])))
-                        logger.info("Validation accuracy {:6.3f}".format(valid_acc / len(val_dls[0])))
-                    elif "ImgSpace" in experiment:
-                        logger.info("Validation MSE loss {:6.4f}".format(valid_ce_loss / len(val_dls[0])))
-
-                    # Early Stopping
-                    if "Modules" not in experiment:
-                        for es, block in zip(early_stoppings, network_blocks):
-                            es(valid_total_loss / len(val_dls[0]), block)  # ES on loss
-                    else:
-                        early_stoppings[0](valid_total_loss / len(val_dls[0]), module)
-                    if early_stoppings[0].early_stop:
-                        logger.info("Early stopping")
-                        break
-                    if "Modules" not in experiment:
-                        for block in network_blocks:
-                            block.train()
-                    else:
-                        module.train()
-            scheduler.step()
-            if early_stoppings[0].early_stop:
-                break
+            # Logging
             if "CrossEntropy" in experiment:
                 results = [epoch, epoch_ce_loss / len(trn_dls[0]), epoch_acc / len(trn_dls[0])]
                 logger.info("Epoch {}. Avg CE train loss {:6.4f}. Avg train acc {:6.3f}.".format(*results))
@@ -1031,15 +995,90 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
                 results = [epoch, epoch_ce_loss / len(trn_dls[0]), epoch_acc / len(trn_dls[0])]
                 logger.info("Epoch {}. Avg MSE train loss {:6.4f}. Avg train acc {:6.3f}.".format(*results))
 
+            # Validation
+            if "Modules" not in experiment:
+                for block in network_blocks:
+                    block.eval()
+            else:
+                module.eval()
+            valid_ce_loss = 0.0
+            valid_ctv_loss = 0.0
+            valid_total_loss = 0.0
+            valid_acc = 0.0
+            with torch.no_grad():
+                for val_data_tuples in zip(*val_dls):
+                    x_val, y_val = generate_batch(val_data_tuples, dev)
+                    if "CrossEntropy" in experiment:
+                        ce_loss, acc = cross_entropy_forwards_pass(network_blocks, x_val, y_val,
+                                                                   cross_entropy_loss_fn, accuracy_fn)
+                        valid_ce_loss += ce_loss.item()
+                        valid_total_loss += ce_loss.item()
+                        valid_acc += acc
+                    elif "Contrastive" in experiment:
+                        ce_loss, ctv_loss, acc = contrastive_forwards_pass(network_blocks, x_val, y_val,
+                                                                           cross_entropy_loss_fn, accuracy_fn,
+                                                                           contrastive_loss_fn, contrastive_levels,
+                                                                           weight, single_corr_bs)
+                        valid_ce_loss += ce_loss.item()
+                        valid_ctv_loss += ctv_loss.item()
+                        valid_total_loss += ce_loss.item() + ctv_loss.item()
+                        valid_acc += acc
+                    elif "Modules" in experiment:
+                        ce_loss, ctv_loss, acc = modules_forwards_pass(network_blocks, module, module_level,
+                                                                       x_val, y_val,
+                                                                       cross_entropy_loss_fn, accuracy_fn,
+                                                                       contrastive_loss_fn,
+                                                                       weight, single_corr_bs)
+                        valid_ce_loss += ce_loss.item()
+                        valid_ctv_loss += ctv_loss.item()
+                        valid_total_loss += ce_loss.item() + ctv_loss.item()
+                        valid_acc += acc
+                    elif "ImgSpace" in experiment:
+                        mse_loss = autoencoder_forwards_pass(network_blocks, x_val, mse_loss_fn, single_corr_bs)
+                        valid_ce_loss += mse_loss.item()
+                        valid_total_loss += mse_loss.item()
+                    else:
+                        raise NotImplementedError("Experiment {} not implemented".format(experiment))
+            if "CrossEntropy" in experiment:
+                logger.info("Validation CE loss {:6.4f}".format(valid_ce_loss / len(val_dls[0])))
+                logger.info("Validation accuracy {:6.3f}".format(valid_acc / len(val_dls[0])))
+            elif "Contrastive" in experiment or "Modules" in experiment:
+                logger.info("Validation CE loss {:6.4f}".format(valid_ce_loss / len(val_dls[0])))
+                logger.info("Validation contrastive loss {:6.4f}".format(valid_ctv_loss / len(val_dls[0])))
+                logger.info("Validation accuracy {:6.3f}".format(valid_acc / len(val_dls[0])))
+            elif "ImgSpace" in experiment:
+                logger.info("Validation MSE loss {:6.4f}".format(valid_ce_loss / len(val_dls[0])))
+
+            # Learning rate scheduler
+            scheduler.step()
+
+            # Early Stopping
+            if "Modules" not in experiment:
+                for es, block in zip(early_stoppings, network_blocks):
+                    es(valid_total_loss / len(val_dls[0]), block, optim, scheduler, epoch)  # ES on loss
+            else:
+                early_stoppings[0](valid_total_loss / len(val_dls[0]), module, optim, scheduler, epoch)
+            if early_stoppings[0].early_stop:
+                logger.info("Early stopping")
+                break
+            # if "Modules" not in experiment:
+            #     for block in network_blocks:
+            #         block.train()
+            # else:
+            #     module.train()
+            #
+            # if early_stoppings[0].early_stop:
+            #     break
+
         # Save model
         logger.info("Loading early stopped checkpoints")
         if "Modules" not in experiment:
             for es, block in zip(early_stoppings, network_blocks):
-                es.load_from_checkpoint(block)
+                _ = es.load_from_checkpoint(block, optim, scheduler, dev)
             for block in network_blocks:
                 block.eval()
         else:
-            early_stoppings[0].load_from_checkpoint(module)
+            _ = early_stoppings[0].load_from_checkpoint(module, optim, scheduler, dev)
             module.eval()
         valid_ce_loss = 0.0
         valid_ctv_loss = 0.0
@@ -1126,7 +1165,8 @@ if __name__ == "__main__":
         raise ValueError("Dataset {} not implemented".format(args.dataset))
 
     # Set seeding
-    reset_rngs(seed=1357911, deterministic=True)
+    reset_rngs(seed=369121518, deterministic=True)
+    # reset_rngs(seed=1357911, deterministic=True)
     # reset_rngs(seed=246810, deterministic=True)
 
     # Set device

@@ -209,7 +209,7 @@ if __name__ == "__main__":
     experiments = ["CrossEntropy",
                    "Contrastive",
                    "Modules", "AutoModules",
-                   "ImgSpaceIdentityClassifier", "ImgSpaceJointClassifier"]
+                   "ImgSpaceIdentityClassifier"] # , "ImgSpaceJointClassifier"]
 
     # experiments = ["CrossEntropy", "Contrastive", "Modules"]
 
@@ -253,7 +253,7 @@ if __name__ == "__main__":
     #                "AutoModulesV2"]
 
     # Set seeding
-    reset_rngs(seed=1357911, deterministic=True)
+    reset_rngs(seed=369121518, deterministic=True)
 
     # Create unmade directories
     mkdir_p(args.save_path)

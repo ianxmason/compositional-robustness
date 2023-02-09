@@ -18,7 +18,8 @@ from lib.networks import create_emnist_network, create_emnist_modules, create_em
                          create_facescrub_network, create_facescrub_modules, create_facescrub_autoencoder
 from lib.utils import *
 from lib.equivariant_hooks import *
-from deephys import import_test_data, Neuron, Layer, Model
+
+# import deephys as dp
 
 
 def loss_and_accuracy(network_blocks, dataloader, dev):
@@ -72,33 +73,19 @@ def loss_and_accuracy(network_blocks, dataloader, dev):
                         all_images.append(x_tst.cpu().numpy())
 
 
-                    if not deephys_init:  # https://colab.research.google.com/github/mjgroth/deephys-aio/blob/master/Python_Tutorial.ipynb#scrollTo=bcEBrF-WYOKI
-                        layer_list = []
-
-                        neuron_list = []
-                        for i in range(np.shape(features)[1]):
-                            neuron_list.append(Neuron())
-                        layer_list.append(Layer(
-                            layerID="penultimate",
-                            neurons=neuron_list
-                        ))
-
-                        neuron_list = []
-                        for i in range(np.shape(output)[1]):
-                            neuron_list.append(Neuron())
-                        layer_list.append(Layer(
-                            layerID="classification",
-                            neurons=neuron_list
-                        ))
-
-                        model = Model(
-                            name="emnist_simple_net",
-                            suffix=None,
-                            layers=layer_list
-                        )
-                        model.save()
-
-                        deephys_init = True
+                    dp_model = None
+                    # if not deephys_init:  # https://colab.research.google.com/github/mjgroth/deephys-aio/blob/master/Python_Tutorial.ipynb#scrollTo=bcEBrF-WYOKI
+                    #     dp_model = dp.model(
+                    #         name="emnist_simple_net",
+                    #         layers={  # include any additional layers
+                    #             "penultimate_layer": np.shape(features)[1],
+                    #             "output": np.shape(output)[1],
+                    #         },
+                    #         classification_layer="output"
+                    #     )
+                    #     dp_model.save()
+                    #
+                    #     deephys_init = True
                 else:
                     features = block(features)
             loss = criterion(output, y_tst)
@@ -116,7 +103,7 @@ def loss_and_accuracy(network_blocks, dataloader, dev):
         print(all_cats.shape)
         print(np.max(all_images))
 
-    return test_loss / len(dataloader), test_acc / len(dataloader), all_activs, all_outputs, all_images, all_cats, model
+    return test_loss / len(dataloader), test_acc / len(dataloader), all_activs, all_outputs, all_images, all_cats, dp_model
 
 
 def test_all(experiment, dataset, data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers, pin_mem, dev,
@@ -127,9 +114,9 @@ def test_all(experiment, dataset, data_root, ckpt_path, save_path, total_n_class
     Parallelise by testing different compositions in different processes
     """
     files = os.listdir(ckpt_path)
-    for f in files:
-        if "es_" == f[:3]:
-            raise ValueError("Early stopping ckpt found {}. Training hasn't finished yet".format(f))
+    # for f in files:
+    #     if "es_" == f[:3]:
+    #         raise ValueError("Early stopping ckpt found {}. Training hasn't finished yet".format(f))
     files = ['_'.join(f.split('_')[2:]) for f in files if f.split('_')[0] == experiment]
     files.sort(key=lambda x: len(x.split('-')))
     ckpt = files[-1]
@@ -171,7 +158,7 @@ def test_all(experiment, dataset, data_root, ckpt_path, save_path, total_n_class
         corruptions = corruptions[corruptions_per_process * process:corruptions_per_process * (process + 1)]
 
     for test_corruption in corruptions:
-        test_corruption = ["Identity"]
+        test_corruption = ["Contrast"]
         print("Testing {} on {}".format(ckpt, test_corruption))
         sys.stdout.flush()
         trained_classes = list(range(total_n_classes))
@@ -193,30 +180,43 @@ def test_all(experiment, dataset, data_root, ckpt_path, save_path, total_n_class
         _, _, tst_dl = get_transformed_static_dataloaders(dataset, identity_path, transforms, trained_classes,
                                                           batch_size, False, n_workers, pin_mem)
 
-        tst_loss, tst_acc, all_activs, all_outputs, all_images, all_cats, model = loss_and_accuracy(network_blocks, tst_dl, dev)
+        tst_loss, tst_acc, all_activs, all_outputs, all_images, all_cats, dp_model = loss_and_accuracy(network_blocks, tst_dl, dev)
         corruption_accs['-'.join(test_corruption)] = tst_acc
         corruption_losses['-'.join(test_corruption)] = tst_loss
         print("{}, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment, '-'.join(test_corruption), tst_loss,
                                                                    tst_acc))
         sys.stdout.flush()
 
-    classes = tuple([str(i) for i in range(total_n_classes)])
+        classes = tuple([str(i) for i in range(total_n_classes)])
 
-    all_images = torch.tensor(all_images / 255.0)  # Needs to be in [0,1]
-    # print(torch.max(all_images))
-    # print(all_images[0,0,0,0].dtype)
 
-    test = import_test_data(
-        "EMNIST-Identity",
-        classes,  # List with all category names
-        [torch.tensor(all_activs), torch.tensor(all_outputs)],  # List with neural activity
-        model,  # Structure describing the model (see documentation)
-        all_images,  # Images resized to 32x32 pixels
-        all_cats.tolist()  # Labels
-    )
-    test.suffix = None
-    test.save()
-    print(2/0)  # Don't overwrite existing saved accs
+        print(type(all_cats))  # np.array
+        print(all_cats.shape)  # (18688,)
+        print(type(all_images))  # np.array
+        print(all_images.shape)  # (18688, 3, 28, 28)
+        print(type(all_activs))  # np.array
+        print(all_activs.shape)  # (18688, 512)
+        print(type(all_outputs))  # np.array
+        print(all_outputs.shape)  # (18688, 47)
+        print(type(classes))  # tuple
+        print(classes)  # 47
+
+        # Save numpy arrays to test deephys locally if not working on cluster
+        np.savez(os.path.join("/om2/user/imason/compositions/slurm/EMNIST5/deephys/",
+                              f"EMNIST-{test_corruption[0]}.npz"), all_cats=all_cats, all_images=all_images / 255.0,
+                              all_activs=all_activs, all_outputs=all_outputs)
+
+        # all_images = torch.tensor(all_images / 255.0)  # Needs to be in [0,1]
+        # test = dp.import_test_data(
+        #     name=f"EMNIST-{test_corruption[0]}", # Ugly, uses test_corruption from last iteration of loop
+        #     pixel_data=all_images,  # Images resized to 32x32 pixels
+        #     ground_truths=all_cats.tolist(),  # Labels
+        #     classes=classes,  # List with all category names
+        #     state=[torch.tensor(all_activs), torch.tensor(all_outputs)],  # List with neural activity
+        #     model=dp_model
+        # )
+        # test.save()
+        print(2/0)  # Don't overwrite existing saved accs
 
     # Save the results
     # with open(os.path.join(save_path, "{}_{}_all_accs_process_{}_of_{}.pkl".format(experiment, ckpt[:-3], process,
