@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH -t 48:00:00                  #  walltime hh:mm:ss
+#SBATCH -t 24:00:00                  #  walltime hh:mm:ss
 #SBATCH -N 1                         #  one node
 #SBATCH -n 4                         #  CPU cores
-#SBATCH -x dgx001,dgx002,node[031,034,055,056,058,061,069,078,082,083,091,092]
+#SBATCH -x dgx001,dgx002,node[031,034,055,056,058,061,063,069,078,082,083,091,092]
 #SBATCH -o /om2/user/imason/compositions/slurm/EMNIST5/slurm-%j.out    # file to send output to
-#SBATCH --array=0                    #  Modules/ImgSpace: 0-5. Contrastive/CE: 0. EMNIST5: 0-63. The elemental sets of corruptions as separate jobs
-#SBATCH --mem=24G                    #  RAM.
+#SBATCH --array=0-5                    #  Modules/ImgSpace: 0-5. Contrastive/CE: 0. EMNIST5: 0-63. The elemental sets of corruptions as separate jobs
+#SBATCH --mem=20G                    #  RAM.
 #SBATCH --gres=gpu:1                 #  one GPU
-#SBATCH --constraint=any-A100        #  any-gpu any gpu on cluster (may not be compatible with pytorch.
+#SBATCH --constraint=11GB        #  any-gpu any gpu on cluster (may not be compatible with pytorch.
 #                                    #  =high-capacity gives high-capacity GPU (compatible). =11GB gives 11gb gpu.
 
 hostname
@@ -20,46 +20,64 @@ module load openmind/singularity/3.5.0
 
 # EXCLUDE NODES
 # For removing the A100s exclude: dgx001,dgx002,node[093,094,097,098,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116]
-# For current list of nodes I am skeptical about: dgx001,dgx002,node[031,034,055,056,058,061,069,078,082,083,091,092]
+# For current list of nodes I am skeptical about: dgx001,dgx002,node[031,034,055,056,058,061,063,069,078,082,083,091,092]
 
 # For modules/img space autoencoders. -t 14:00:00 -n 2 --array=0-5 --mem 12G --constraint=11GB #SBATCH -x dgx001,dgx002,node[093,094,097,098,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116]
 #   for initial training on Identity set --array=0. For Facescrub set --mem 20G.
 # For contrastive/CE/img space classifiers. -t 48:00:00 -n 4 --mem 24G --array=0 --constraint=any-A100
 # If doing hparam search may be best to allow any node except dgx and set for 48h and see how things go
 
-# EMNIST
+### EMNIST ###
 # Cross Entropy
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "EMNIST" --experiment "CrossEntropy" --total-n-classes 47 --max-epochs 200 --lr 1e-2 --corruption-ID $SLURM_ARRAY_TASK_ID --n-workers 4 --check-if-run
 # Contrastive loss
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "EMNIST" --experiment "Contrastive" --total-n-classes 47 --max-epochs 200 --lr 1e-2 --weight 0.1 --corruption-ID $SLURM_ARRAY_TASK_ID --n-workers 4 --check-if-run
-# Modules
+
+# Modules - pretraining
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "EMNIST" --experiment "Modules" --total-n-classes 47 --max-epochs 200 --lr 1e-1 --weight 1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
-#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "EMNIST" --experiment "AutoModules" --total-n-classes 47 --max-epochs 200 --lr 1e-1 --weight 1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
-# Autoencoders
+# Modules - train modules
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "EMNIST" --experiment "Modules" --total-n-classes 47 --max-epochs 200 --lr 1e-2 --weight 1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "EMNIST" --experiment "AutoModules" --total-n-classes 47 --max-epochs 200 --lr 1e-2 --weight 1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
+
+# Autoencoders - train autoencoders
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "EMNIST" --experiment "ImgSpace" --total-n-classes 47 --max-epochs 200 --lr 1e-2 --corruption-ID $SLURM_ARRAY_TASK_ID --n-workers 4 --check-if-run
+# Autoencoders - train classifiers
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "EMNIST" --experiment "ImgSpace" --total-n-classes 47 --max-epochs 200 --lr 1e-2 --corruption-ID $SLURM_ARRAY_TASK_ID --n-workers 4 --check-if-run
 
-# CIFAR
+### CIFAR ###
 # Cross Entropy
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "CIFAR" --experiment "CrossEntropy" --total-n-classes 10 --max-epochs 200 --lr 1e-2 --corruption-ID $SLURM_ARRAY_TASK_ID --n-workers 4 --check-if-run
 # Contrastive loss
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "CIFAR" --experiment "Contrastive" --total-n-classes 10 --max-epochs 200 --lr 1e-2 --weight 0.1 --corruption-ID $SLURM_ARRAY_TASK_ID --n-workers 4 --check-if-run
-# Modules
+
+# Modules - pretraining
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "CIFAR" --experiment "Modules" --total-n-classes 10 --max-epochs 200 --lr 1e-1 --weight 1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
-#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "CIFAR" --experiment "AutoModules" --total-n-classes 10 --max-epochs 200 --lr 1e-1 --weight 1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
-# Autoencoders
+# Modules - train modules
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "CIFAR" --experiment "Modules" --total-n-classes 10 --max-epochs 200 --lr 1e-2 --weight 1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "CIFAR" --experiment "AutoModules" --total-n-classes 10 --max-epochs 200 --lr 1e-2 --weight 1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
+
+# Autoencoders - train autoencoders
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "CIFAR" --experiment "ImgSpace" --total-n-classes 10 --max-epochs 200 --lr 1e-2 --corruption-ID $SLURM_ARRAY_TASK_ID --n-workers 4 --check-if-run
+# Autoencoders - train classifiers
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "CIFAR" --experiment "ImgSpace" --total-n-classes 10 --max-epochs 200 --lr 1e-2 --corruption-ID $SLURM_ARRAY_TASK_ID --n-workers 4 --check-if-run
 
 
-# FACESCRUB
+### FACESCRUB ###
 # Cross Entropy
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "FACESCRUB" --experiment "CrossEntropy" --total-n-classes 388 --max-epochs 200 --lr 1e-2 --corruption-ID $SLURM_ARRAY_TASK_ID --n-workers 4 --check-if-run
 # Contrastive loss
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "FACESCRUB" --experiment "Contrastive" --total-n-classes 388 --max-epochs 200 --lr 1e-2 --weight 0.1 --corruption-ID $SLURM_ARRAY_TASK_ID --n-workers 4 --check-if-run
-# Modules
+
+# Modules - pretraining
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "FACESCRUB" --experiment "Modules" --total-n-classes 388 --max-epochs 200 --lr 1e-1 --weight 1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
-#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "FACESCRUB" --experiment "AutoModules" --total-n-classes 388 --max-epochs 200 --lr 1e-1 --weight 1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
-# Autoencoders
+# Modules - train modules
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "FACESCRUB" --experiment "Modules" --total-n-classes 388 --max-epochs 200 --lr 1e-2 --weight 1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "FACESCRUB" --experiment "AutoModules" --total-n-classes 388 --max-epochs 200 --lr 1e-2 --weight 1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
+
+# Autoencoders - train autoencoders
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "FACESCRUB" --experiment "ImgSpace" --total-n-classes 388 --max-epochs 200 --lr 1e-2 --corruption-ID $SLURM_ARRAY_TASK_ID --n-workers 4 --check-if-run
+# Autoencoders - train classifiers
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "FACESCRUB" --experiment "ImgSpace" --total-n-classes 388 --max-epochs 200 --lr 1e-1 --corruption-ID $SLURM_ARRAY_TASK_ID --n-workers 4 --check-if-run
 
 
 

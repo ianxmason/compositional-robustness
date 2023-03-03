@@ -540,37 +540,86 @@ def find_contrastive_abstraction_levels(corruption_names, dataset, trn_dls, val_
 
 
 def get_module_abstraction_level(experiment, network_blocks, dataset, trn_dls, val_dls, logging_path, corruption_names,
-                                 lr, cross_entropy_loss_fn, accuracy_fn, contrastive_loss_fn, weight, single_corr_bs, dev):
+                                 max_epochs, lr, cross_entropy_loss_fn, accuracy_fn, contrastive_loss_fn, weight,
+                                 single_corr_bs, dev):
     if "Auto" in experiment:
         module_level = find_module_abstraction_level(network_blocks, dataset, trn_dls, val_dls, logging_path,
-                                                     corruption_names, lr, cross_entropy_loss_fn, accuracy_fn,
-                                                     contrastive_loss_fn, weight, single_corr_bs, dev)
+                                                     corruption_names, max_epochs, lr, cross_entropy_loss_fn,
+                                                     accuracy_fn, contrastive_loss_fn, weight, single_corr_bs, dev)
     else:  # Manually Defined Level of Abstraction
+        """Using values found with firing rate analysis"""
         if dataset == "EMNIST":
-            if "Contrast" in corruption_names or "GaussianBlur" in corruption_names or \
-                    "ImpulseNoise" in corruption_names or "Invert" in corruption_names:
-                module_level = 1  # After first conv layer for local corruptions
+            if "Contrast" in corruption_names:
+                module_level = 0
+            elif "GaussianBlur" in corruption_names:
+                module_level = 0
+            elif "ImpulseNoise" in corruption_names:
+                module_level = 0
+            elif "Invert" in corruption_names:
+                module_level = 0
+            elif "Rotate90" in corruption_names:
+                module_level = 4
+            elif "Swirl" in corruption_names:
+                module_level = 5
             else:
-                module_level = 4  # After last conv layer for long range dependencies
+                raise ValueError("Invalid corruption name")
         elif dataset == "CIFAR":
-            if "Contrast" in corruption_names or "GaussianBlur" in corruption_names or \
-                    "ImpulseNoise" in corruption_names or "Invert" in corruption_names:
-                module_level = 1  # After first conv layer for local corruptions
+            if "Contrast" in corruption_names:
+                module_level = 0
+            elif "GaussianBlur" in corruption_names:
+                module_level = 0
+            elif "ImpulseNoise" in corruption_names:
+                module_level = 0
+            elif "Invert" in corruption_names:
+                module_level = 0
+            elif "Rotate90" in corruption_names:
+                module_level = 9
+            elif "Swirl" in corruption_names:
+                module_level = 9
             else:
-                module_level = 9  # After last conv layer for long range dependencies
+                raise ValueError("Invalid corruption name")
         elif dataset == "FACESCRUB":
-            if "Contrast" in corruption_names or "GaussianBlur" in corruption_names or \
-                    "ImpulseNoise" in corruption_names or "Invert" in corruption_names:
-                module_level = 1  # After first conv layer for local corruptions
+            if "Contrast" in corruption_names:
+                module_level = 3  # picked by intuition/experimentation
+            elif "GaussianBlur" in corruption_names:
+                module_level = 1  # picked by intuition/experimentation
+            elif "ImpulseNoise" in corruption_names:
+                module_level = 0  # picked by intuition/experimentation
+            elif "Invert" in corruption_names:
+                module_level = 0  # picked by intuition/experimentation
+            elif "Rotate90" in corruption_names:
+                module_level = 6  # picked by intuition/experimentation
+            elif "Swirl" in corruption_names:
+                module_level = 6  # picked by intuition/experimentation
             else:
-                module_level = 16  # After last conv layer for long range dependencies
+                raise ValueError("Invalid corruption name")
+        """Using heuristic where local module after first conv and long range dependencies after last conv"""
+        # if dataset == "EMNIST":
+        #     if "Contrast" in corruption_names or "GaussianBlur" in corruption_names or \
+        #             "ImpulseNoise" in corruption_names or "Invert" in corruption_names:
+        #         module_level = 1  # After first conv layer for local corruptions
+        #     else:
+        #         module_level = 4  # After last conv layer for long range dependencies
+        # elif dataset == "CIFAR":
+        #     if "Contrast" in corruption_names or "GaussianBlur" in corruption_names or \
+        #             "ImpulseNoise" in corruption_names or "Invert" in corruption_names:
+        #         module_level = 1  # After first conv layer for local corruptions
+        #     else:
+        #         module_level = 9  # After last conv layer for long range dependencies
+        # elif dataset == "FACESCRUB":
+        #     if "Contrast" in corruption_names or "GaussianBlur" in corruption_names or \
+        #             "ImpulseNoise" in corruption_names or "Invert" in corruption_names:
+        #         module_level = 1  # After first conv layer for local corruptions
+        #     else:
+        #         module_level = 16  # After last conv layer for long range dependencies
 
     return module_level
 
 
-def find_module_abstraction_level(network_blocks, dataset, trn_dls, val_dls, logging_path, corruption_names, lr,
-                                  cross_entropy_loss_fn, accuracy_fn, contrastive_loss_fn, weight, single_corr_bs, dev,
-                                  num_iterations=250, num_repeats=3):
+def find_module_abstraction_level(network_blocks, dataset, trn_dls, val_dls, logging_path, corruption_names, max_epochs,
+                                  lr, cross_entropy_loss_fn, accuracy_fn, contrastive_loss_fn, weight, single_corr_bs,
+                                  dev, num_epochs=5, num_repeats=3):
+                                  # dev, num_iterations=250, num_repeats=3):
     """
     Tries training the network with modules at every level of abstraction. Trains for num_iterations update steps.
     Repeats the experiment num_repeats times. Returns the level of abstraction that gives the best mean performance.
@@ -595,40 +644,44 @@ def find_module_abstraction_level(network_blocks, dataset, trn_dls, val_dls, log
             train_accs["Level-{}_Repeat-{}".format(i, n)] = []
             # temp_optim = torch.optim.Adam(module.parameters(), lr)
             temp_optim = torch.optim.SGD(module.parameters(), lr, momentum=0.9, weight_decay=5e-4)
+            temp_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(temp_optim, T_max=max_epochs)
 
-            module_ce_loss = 0.0
-            module_ctv_loss = 0.0
-            module_acc = 0.0
+            for epoch in range(num_epochs):
+                # Training
+                module.train()
+                module_ce_loss = 0.0
+                module_ctv_loss = 0.0
+                module_acc = 0.0
+                for j, trn_data_tuples in enumerate(zip(*trn_dls), 1):
+                    x_trn, y_trn = generate_batch(trn_data_tuples, dev)
+                    temp_optim.zero_grad()
+                    ce_loss, ctv_loss, acc = modules_forwards_pass(network_blocks, module, i, x_trn, y_trn,
+                                                                   cross_entropy_loss_fn, accuracy_fn,
+                                                                   contrastive_loss_fn, weight, single_corr_bs)
+                    loss = ce_loss + ctv_loss
+                    module_ce_loss += ce_loss.item()
+                    module_ctv_loss += ctv_loss.item()
+                    module_acc += acc
+                    loss.backward()
+                    temp_optim.step()
+                    train_accs["Level-{}_Repeat-{}".format(i, n)].append(acc)
 
-            # Time batches
-            module.train()
-            for j, trn_data_tuples in enumerate(zip(*trn_dls), 1):
-                x_trn, y_trn = generate_batch(trn_data_tuples, dev)
-                temp_optim.zero_grad()
-                # Only called when "Modules" in experiment
-                ce_loss, ctv_loss, acc = modules_forwards_pass(network_blocks, module, i, x_trn, y_trn,
-                                                               cross_entropy_loss_fn, accuracy_fn, contrastive_loss_fn,
-                                                               weight, single_corr_bs)
-                loss = ce_loss + ctv_loss
-                module_ce_loss += ce_loss.item()
-                module_ctv_loss += ctv_loss.item()
-                module_acc += acc
-                loss.backward()
-                temp_optim.step()
-                train_accs["Level-{}_Repeat-{}".format(i, n)].append(acc)
+                    # if j >= num_iterations:
+                    #     print("Trained for {} batches.".format(j))
+                    #     break
+                temp_scheduler.step()
+                print("Epoch: {}".format(epoch))
+                print("CE Loss: {}".format(module_ce_loss / len(trn_dls[0])))
+                print("CTV Loss: {}".format(module_ctv_loss / len(trn_dls[0])))
+                print("Accuracy: {}".format(module_acc / len(trn_dls[0])))
+            # if len(trn_dls[0]) < num_iterations:
+            #     denominator = len(trn_dls[0])
+            # else:
+            #     denominator = num_iterations
 
-                if j >= num_iterations:
-                    print("Trained for {} batches.".format(j))
-                    break
-
-            if len(trn_dls[0]) < num_iterations:
-                denominator = len(trn_dls[0])
-            else:
-                denominator = num_iterations
-
-            print("CE Loss: {}".format(module_ce_loss / denominator))
-            print("CTV Loss: {}".format(module_ctv_loss / denominator))
-            print("Accuracy: {}".format(module_acc / denominator))
+            # print("CE Loss: {}".format(module_ce_loss / denominator))
+            # print("CTV Loss: {}".format(module_ctv_loss / denominator))
+            # print("Accuracy: {}".format(module_acc / denominator))
 
             module.eval()
             module_valid_ce_loss = 0.0
@@ -646,18 +699,18 @@ def find_module_abstraction_level(network_blocks, dataset, trn_dls, val_dls, log
                     module_valid_total_loss += ce_loss.item() + ctv_loss.item()
                     module_valid_acc += acc
 
-                    if j >= num_iterations:
-                        print("Validated for {} batches.".format(j))
-                        break
+                    # if j >= num_iterations:
+                    #     print("Validated for {} batches.".format(j))
+                    #     break
 
-            if len(val_dls[0]) < num_iterations:
-                denominator = len(val_dls[0])
-            else:
-                denominator = num_iterations
-            print("Validation CE loss {:6.4f}".format(module_valid_ce_loss / denominator))
-            print("Validation contrastive loss {:6.4f}".format(module_valid_ctv_loss / denominator))
-            print("Validation accuracy {:6.3f}".format(module_valid_acc / denominator))
-            val_accs[n].append(module_valid_acc / denominator)
+            # if len(val_dls[0]) < num_iterations:
+            #     denominator = len(val_dls[0])
+            # else:
+            #     denominator = num_iterations
+            print("Validation CE loss {:6.4f}".format(module_valid_ce_loss / len(val_dls[0])))
+            print("Validation contrastive loss {:6.4f}".format(module_valid_ctv_loss / len(val_dls[0])))
+            print("Validation accuracy {:6.3f}".format(module_valid_acc / len(val_dls[0])))
+            val_accs[n].append(module_valid_acc / len(val_dls[0]))
 
     # Pickle train accs for plotting
     with open(os.path.join(logging_path, "module_train_accs_{}.pkl".format(corruption_names[0])), "wb") as f:
@@ -843,8 +896,9 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
         elif "Modules" in experiment:
             logger.info("Finding Module Level of Abstraction")
             module_level = get_module_abstraction_level(experiment, network_blocks, dataset, trn_dls, val_dls,
-                                                        logging_path, corruption_names, lr, cross_entropy_loss_fn,
-                                                        accuracy_fn, contrastive_loss_fn, weight, single_corr_bs, dev)
+                                                        logging_path, corruption_names, max_epochs, lr,
+                                                        cross_entropy_loss_fn, accuracy_fn, contrastive_loss_fn,
+                                                        weight, single_corr_bs, dev)
             logger.info("Using Level of Abstraction {}".format(module_level))
 
             if dataset == "EMNIST":

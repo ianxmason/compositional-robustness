@@ -24,6 +24,7 @@ for corr in elem_corrs:
     mod_levels = list(set(mod_levels))
     mod_levels.sort()
 
+    """Plot accuracy for each level of abstraction"""
     fig, axs = plt.subplots(1, 1, figsize=(8, 8))
     axs.set_title("Training accuracy for {} at different levels of abstraction".format(corr))
     axs.set_ylim(0, 100)
@@ -50,3 +51,38 @@ for corr in elem_corrs:
     axs.legend(loc='upper left')
     plt.savefig(os.path.join(save_path, "module-{}-learning-curves.pdf".format(corr)), bbox_inches="tight")
     print("Saved learning curves to {}".format(os.path.join(save_path, "module-{}-learning-curves.pdf".format(corr))))
+
+
+    """Plot error on log-log for better visualization. Test a bit more - not sure."""
+    # fig, axs = plt.subplots(1, 1, figsize=(8, 8))
+    # axs.set_title("Log-Log training error for {} at different levels of abstraction".format(corr))
+    # axs.set_ylim(0, 10)
+    # axs.set_xlabel("Log Training Iteration")
+    # axs.set_ylabel("Log Error (%)")
+    #
+    # if len(mod_levels) < 10:
+    #     colors = plt.get_cmap('tab10')(np.linspace(0, 1, len(mod_levels)))
+    # else:
+    #     colors = plt.get_cmap('tab20')(np.linspace(0, 1, len(mod_levels)))
+    # for i, level in enumerate(mod_levels):
+    #     level_values = []
+    #     for k, v in train_accs.items():
+    #         if "Level-{}_".format(level) in k:
+    #             level_values.append(v)
+    #     level_values = np.array(level_values)
+    #     level_values = 100 - level_values
+    #     level_values = np.where(level_values == 0, 1e-6, level_values)  # Remove 0s
+    #     level_values = np.log(level_values)
+    #     level_mean = np.mean(level_values, axis=0)
+    #     level_std = np.std(level_values, axis=0)
+    #     xaxis = np.log(range(1, len(level_mean) + 1))
+    #     axs.plot(xaxis, level_mean, label="Level {}".format(level), color=colors[i])
+    #     # axs.loglog(range(1, len(level_mean) + 1), level_mean, label="Level {}".format(level), color=colors[i])
+    #     # axs.plot(range(1, len(level_mean) + 1), level_mean, label="Level {}".format(level), color=colors[i])
+    #     # axs.fill_between(range(1, len(level_mean) + 1), level_mean - level_std, level_mean + level_std, alpha=0.2,
+    #     #                  color=colors[i])
+    #
+    # axs.set_xlim(np.log(1), np.log(len(level_mean)+1))
+    # axs.legend(loc='upper left')
+    # plt.savefig(os.path.join(save_path, "module-{}-log-log-error-curves.pdf".format(corr)), bbox_inches="tight")
+    # print("Saved log-log error curves to {}".format(os.path.join(save_path, "module-{}-log-log-error-curves.pdf".format(corr))))

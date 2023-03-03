@@ -2,7 +2,7 @@
 #SBATCH -t 0:30:00                   #  walltime hh:mm:ss.
 #SBATCH -N 1                         #  one node
 #SBATCH -n 8                         #  CPU cores
-#SBATCH -x dgx001,dgx002,node[055,056,061,066,067,069,078,082,083,088,091,092,093,094,097,098,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115]  #  had this issue https://github.mit.edu/MGHPCC/OpenMind/issues/3375
+#SBATCH -x dgx001,dgx002,node[031,055,056,058,061,063,066,067,069,078,082,083,088,091,092,093,094,097,098,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115]  #  had this issue https://github.mit.edu/MGHPCC/OpenMind/issues/3375
 #SBATCH -o /om2/user/imason/compositions/slurm/EMNIST5/slurm-%j.out    # file to send output to
 #SBATCH --array=0-19                 #  split the ckpts to test into groups. EMNIST 5: 0-15 with test-all off. 0-19 with test-all on. EMNIST 4: 0-15 with test-all off. 0-17 with test-all on.
 #SBATCH --mem=16G                    #  RAM
@@ -47,9 +47,9 @@ do
               python test.py --pin-mem \
                              --check-if-run \
                              --test-all \
-                             --dataset "EMNIST" \
-                             --total-n-classes 47 \
-                             --experiment "ImgSpace" \
+                             --dataset "FACESCRUB" \
+                             --total-n-classes 388 \
+                             --experiment "AutoModules" \
                              --num-processes $(($SLURM_ARRAY_TASK_COUNT * $jobs_per_gpu)) \
                              --process $(($SLURM_ARRAY_TASK_ID * $jobs_per_gpu + $number)) &
 done

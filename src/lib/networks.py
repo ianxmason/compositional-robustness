@@ -744,40 +744,22 @@ def create_facescrub_autoencoder(experiment, corruption_names, dev):
     network_blocks = []
     network_block_ckpt_names = []
 
-    # nn.Conv2d(3, 32, kernel_size=5, stride=1, padding=2),
-    # nn.BatchNorm2d(32),
-    # nn.ReLU(),
-    # nn.Conv2d(32, 64, kernel_size=5, stride=2, padding=2),
-    # nn.BatchNorm2d(64),
-    # nn.ReLU(),
-    # nn.Conv2d(64, 64, kernel_size=5, stride=2, padding=2),
-    # nn.BatchNorm2d(64),
-    # nn.ReLU(),
-
-
-    # nn.ConvTranspose2d(64, 64, kernel_size=5, stride=2, padding=2, output_padding=1),
-    # nn.BatchNorm2d(64),
-    # nn.ReLU(),
-    # nn.ConvTranspose2d(64, 32, kernel_size=5, stride=2, padding=2, output_padding=1),
-    # nn.BatchNorm2d(32),
-    # nn.ReLU(),
-    # nn.ConvTranspose2d(32, 3, kernel_size=5, stride=1, padding=2)
-
     network_blocks.append(
         nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=5, stride=2, padding=2),
-            # nn.Dropout2d(0.1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
             nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2),
-            # nn.Dropout2d(0.3),
+            nn.BatchNorm2d(128),
             nn.ReLU(),
             nn.Conv2d(128, 256, kernel_size=5, stride=2, padding=2),
-            # nn.Dropout2d(0.5),
+            nn.BatchNorm2d(256),
             nn.ReLU(),
             nn.Conv2d(256, 256, kernel_size=5, stride=2, padding=2),
-            # nn.Dropout2d(0.5),
+            nn.BatchNorm2d(256),
             nn.ReLU(),
             nn.Conv2d(256, 512, kernel_size=5, stride=2, padding=2),
-            # nn.Dropout2d(0.5),
+            nn.BatchNorm2d(512),
             nn.ReLU()
         ).to(dev)
     )
@@ -786,16 +768,16 @@ def create_facescrub_autoencoder(experiment, corruption_names, dev):
     network_blocks.append(
         nn.Sequential(
             nn.ConvTranspose2d(512, 256, kernel_size=5, stride=2, padding=2),
-            # nn.Dropout2d(0.5),
+            nn.BatchNorm2d(256),
             nn.ReLU(),
             nn.ConvTranspose2d(256, 256, kernel_size=5, stride=2, padding=2),
-            # nn.Dropout2d(0.5),
+            nn.BatchNorm2d(256),
             nn.ReLU(),
             nn.ConvTranspose2d(256, 128, kernel_size=5, stride=2, padding=2),
-            # nn.Dropout2d(0.5),
+            nn.BatchNorm2d(128),
             nn.ReLU(),
             nn.ConvTranspose2d(128, 64, kernel_size=5, stride=2, padding=2, output_padding=1),
-            # nn.Dropout2d(0.3),
+            nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.ConvTranspose2d(64, 3, kernel_size=5, stride=2, padding=2, output_padding=1)
             # data has mean 0, std 1. so no activation
