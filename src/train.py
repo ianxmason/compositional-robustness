@@ -448,7 +448,6 @@ def find_contrastive_abstraction_levels(corruption_names, dataset, trn_dls, val_
                 temp_parameters = []
                 for block in network_blocks:
                     temp_parameters += list(block.parameters())
-                # temp_optim = torch.optim.Adam(temp_parameters, lr)
                 temp_optim = torch.optim.SGD(temp_parameters, lr, momentum=0.9, weight_decay=5e-4)
 
                 print("Abstraction level {}".format(j))
@@ -469,7 +468,6 @@ def find_contrastive_abstraction_levels(corruption_names, dataset, trn_dls, val_
                                        y_trn[id_idx * single_corr_bs:(id_idx + 1) * single_corr_bs]), dim=0)
 
                     temp_optim.zero_grad()
-                    # Only called when "Contrastive" in experiment
                     ce_loss, ctv_loss, acc = contrastive_forwards_pass(network_blocks, x_trn, y_trn,
                                                                        cross_entropy_loss_fn, accuracy_fn,
                                                                        contrastive_loss_fn, abstraction_levels, weight,
@@ -547,79 +545,32 @@ def get_module_abstraction_level(experiment, network_blocks, dataset, trn_dls, v
                                                      corruption_names, max_epochs, lr, cross_entropy_loss_fn,
                                                      accuracy_fn, contrastive_loss_fn, weight, single_corr_bs, dev)
     else:  # Manually Defined Level of Abstraction
-        """Using values found with firing rate analysis"""
-        if dataset == "EMNIST":
-            if "Contrast" in corruption_names:
-                module_level = 0
-            elif "GaussianBlur" in corruption_names:
-                module_level = 0
-            elif "ImpulseNoise" in corruption_names:
-                module_level = 0
-            elif "Invert" in corruption_names:
-                module_level = 0
-            elif "Rotate90" in corruption_names:
-                module_level = 4
-            elif "Swirl" in corruption_names:
-                module_level = 5
-            else:
-                raise ValueError("Invalid corruption name")
-        elif dataset == "CIFAR":
-            if "Contrast" in corruption_names:
-                module_level = 0
-            elif "GaussianBlur" in corruption_names:
-                module_level = 0
-            elif "ImpulseNoise" in corruption_names:
-                module_level = 0
-            elif "Invert" in corruption_names:
-                module_level = 0
-            elif "Rotate90" in corruption_names:
-                module_level = 9
-            elif "Swirl" in corruption_names:
-                module_level = 9
-            else:
-                raise ValueError("Invalid corruption name")
-        elif dataset == "FACESCRUB":
-            if "Contrast" in corruption_names:
-                module_level = 3  # picked by intuition/experimentation
-            elif "GaussianBlur" in corruption_names:
-                module_level = 1  # picked by intuition/experimentation
-            elif "ImpulseNoise" in corruption_names:
-                module_level = 0  # picked by intuition/experimentation
-            elif "Invert" in corruption_names:
-                module_level = 0  # picked by intuition/experimentation
-            elif "Rotate90" in corruption_names:
-                module_level = 6  # picked by intuition/experimentation
-            elif "Swirl" in corruption_names:
-                module_level = 6  # picked by intuition/experimentation
-            else:
-                raise ValueError("Invalid corruption name")
         """Using heuristic where local module after first conv and long range dependencies after last conv"""
-        # if dataset == "EMNIST":
-        #     if "Contrast" in corruption_names or "GaussianBlur" in corruption_names or \
-        #             "ImpulseNoise" in corruption_names or "Invert" in corruption_names:
-        #         module_level = 1  # After first conv layer for local corruptions
-        #     else:
-        #         module_level = 4  # After last conv layer for long range dependencies
-        # elif dataset == "CIFAR":
-        #     if "Contrast" in corruption_names or "GaussianBlur" in corruption_names or \
-        #             "ImpulseNoise" in corruption_names or "Invert" in corruption_names:
-        #         module_level = 1  # After first conv layer for local corruptions
-        #     else:
-        #         module_level = 9  # After last conv layer for long range dependencies
-        # elif dataset == "FACESCRUB":
-        #     if "Contrast" in corruption_names or "GaussianBlur" in corruption_names or \
-        #             "ImpulseNoise" in corruption_names or "Invert" in corruption_names:
-        #         module_level = 1  # After first conv layer for local corruptions
-        #     else:
-        #         module_level = 16  # After last conv layer for long range dependencies
+        if dataset == "EMNIST":
+            if "Contrast" in corruption_names or "GaussianBlur" in corruption_names or \
+                    "ImpulseNoise" in corruption_names or "Invert" in corruption_names:
+                module_level = 1  # After first conv layer for local corruptions
+            else:
+                module_level = 4  # After last conv layer for long range dependencies
+        elif dataset == "CIFAR":
+            if "Contrast" in corruption_names or "GaussianBlur" in corruption_names or \
+                    "ImpulseNoise" in corruption_names or "Invert" in corruption_names:
+                module_level = 1  # After first conv layer for local corruptions
+            else:
+                module_level = 9  # After last conv layer for long range dependencies
+        elif dataset == "FACESCRUB":
+            if "Contrast" in corruption_names or "GaussianBlur" in corruption_names or \
+                    "ImpulseNoise" in corruption_names or "Invert" in corruption_names:
+                module_level = 1  # After first conv layer for local corruptions
+            else:
+                module_level = 16  # After last conv layer for long range dependencies
 
     return module_level
 
 
 def find_module_abstraction_level(network_blocks, dataset, trn_dls, val_dls, logging_path, corruption_names, max_epochs,
                                   lr, cross_entropy_loss_fn, accuracy_fn, contrastive_loss_fn, weight, single_corr_bs,
-                                  dev, num_epochs=5, num_repeats=3):
-                                  # dev, num_iterations=250, num_repeats=3):
+                                  dev, num_epochs=5, num_repeats=1):
     """
     Tries training the network with modules at every level of abstraction. Trains for num_iterations update steps.
     Repeats the experiment num_repeats times. Returns the level of abstraction that gives the best mean performance.
@@ -642,7 +593,6 @@ def find_module_abstraction_level(network_blocks, dataset, trn_dls, val_dls, log
         for i, module in enumerate(temp_modules):
             print("Abstraction Level {}".format(i))
             train_accs["Level-{}_Repeat-{}".format(i, n)] = []
-            # temp_optim = torch.optim.Adam(module.parameters(), lr)
             temp_optim = torch.optim.SGD(module.parameters(), lr, momentum=0.9, weight_decay=5e-4)
             temp_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(temp_optim, T_max=max_epochs)
 
@@ -666,22 +616,11 @@ def find_module_abstraction_level(network_blocks, dataset, trn_dls, val_dls, log
                     temp_optim.step()
                     train_accs["Level-{}_Repeat-{}".format(i, n)].append(acc)
 
-                    # if j >= num_iterations:
-                    #     print("Trained for {} batches.".format(j))
-                    #     break
                 temp_scheduler.step()
                 print("Epoch: {}".format(epoch))
                 print("CE Loss: {}".format(module_ce_loss / len(trn_dls[0])))
                 print("CTV Loss: {}".format(module_ctv_loss / len(trn_dls[0])))
                 print("Accuracy: {}".format(module_acc / len(trn_dls[0])))
-            # if len(trn_dls[0]) < num_iterations:
-            #     denominator = len(trn_dls[0])
-            # else:
-            #     denominator = num_iterations
-
-            # print("CE Loss: {}".format(module_ce_loss / denominator))
-            # print("CTV Loss: {}".format(module_ctv_loss / denominator))
-            # print("Accuracy: {}".format(module_acc / denominator))
 
             module.eval()
             module_valid_ce_loss = 0.0
@@ -699,14 +638,6 @@ def find_module_abstraction_level(network_blocks, dataset, trn_dls, val_dls, log
                     module_valid_total_loss += ce_loss.item() + ctv_loss.item()
                     module_valid_acc += acc
 
-                    # if j >= num_iterations:
-                    #     print("Validated for {} batches.".format(j))
-                    #     break
-
-            # if len(val_dls[0]) < num_iterations:
-            #     denominator = len(val_dls[0])
-            # else:
-            #     denominator = num_iterations
             print("Validation CE loss {:6.4f}".format(module_valid_ce_loss / len(val_dls[0])))
             print("Validation contrastive loss {:6.4f}".format(module_valid_ctv_loss / len(val_dls[0])))
             print("Validation accuracy {:6.3f}".format(module_valid_acc / len(val_dls[0])))
@@ -722,6 +653,7 @@ def find_module_abstraction_level(network_blocks, dataset, trn_dls, val_dls, log
     assert len(mean_val_accs) == len(temp_modules)
     # argmax of mean_val_accs
     best_level = mean_val_accs.index(max(mean_val_accs))
+
     return best_level
 
 
@@ -742,7 +674,8 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
                                                              True, n_workers, pin_mem)
             trn_dls = [trn_dl]
             val_dls = [val_dl]
-        elif "Contrastive" in experiment or "Modules" in experiment or "ImgSpace" in experiment:  # each batch contains the same images with different corruptions
+        elif "Contrastive" in experiment or "Modules" in experiment or "ImgSpace" in experiment:
+            # using a fixed generator, each batch contains the exact same images with different corruptions
             generators = [torch.Generator(device='cpu').manual_seed(2147483647) for _ in range(len(corruption_paths))]
             single_corr_bs = batch_size // len(corruption_names)
             trn_dls, val_dls = [], []
@@ -755,12 +688,12 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
                     transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='L'))]
                     transforms += [torchvision.transforms.Lambda(lambda im: im.convert('RGB'))]
                 elif dataset == "CIFAR":  # Color images. Augmentation. Note validation data also augmented.
-                    transforms = [SemiRandomCrop(32, padding=4, seed=1772647822),
+                    transforms = [SemiRandomCrop(32, padding=4, seed=1772647822),  # same augmentation on same image
                                   SemiRandomHorizontalFlip(seed=1928562283)]
                     transforms += [getattr(dt, corruption_name)()]
                     transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='RGB'))]
                 elif dataset == "FACESCRUB":  # Color images. Augmentation. Note validation data also augmented.
-                    transforms = [SemiRandomCrop(100, padding=10, seed=1772647822),
+                    transforms = [SemiRandomCrop(100, padding=10, seed=1772647822),  # same augmentation on same image
                                   SemiRandomHorizontalFlip(seed=1928562283)]
                     transforms += [getattr(dt, corruption_name)()]
                     transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='RGB'))]
@@ -769,13 +702,6 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
                                                                        pin_mem, fixed_generator=generator)
                 trn_dls.append(trn_dl)
                 val_dls.append(val_dl)
-
-            # OLD VERSION
-            # for corruption_path, generator in zip(corruption_paths, generators):
-            #     trn_dl, val_dl, _ = get_static_dataloaders(dataset, corruption_path, train_classes, single_corr_bs,
-            #                                                True, n_workers, pin_mem, fixed_generator=generator)
-            #     trn_dls.append(trn_dl)
-            #     val_dls.append(val_dl)
 
             if "Modules" in experiment:
                 if len(corruption_names) != 2:
@@ -805,7 +731,6 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
                     _ = train_identity_network(network_blocks, network_block_ckpt_names, dataset, data_root,
                                                ckpt_path, logging_path, experiment, total_n_classes,
                                                max_epochs, batch_size, lr, n_workers, pin_mem, dev)
-                    # A hack, not necessary but makes usage more consistent.
                     raise RuntimeError("Identity network training completed - rerun for corruption experiments")
         else:
             raise NotImplementedError("Experiment {} not implemented".format(experiment))
@@ -867,7 +792,6 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
             all_parameters = []
             for block in network_blocks:
                 all_parameters += list(block.parameters())
-            # optim = torch.optim.Adam(all_parameters, lr) # Todo: used for EMNIST, test without
             initial_epoch = 0
             optim = torch.optim.SGD(all_parameters, lr, momentum=0.9, weight_decay=5e-4)
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=max_epochs)
@@ -910,7 +834,6 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
 
             module = modules[module_level]
             module_ckpt_name = module_ckpt_names[module_level]
-            # optim = torch.optim.Adam(module.parameters(), lr)  # Todo: used for EMNIST, test without
             initial_epoch = 0
             optim = torch.optim.SGD(module.parameters(), lr, momentum=0.9, weight_decay=5e-4)
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=max_epochs)
@@ -946,7 +869,6 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
             all_parameters = []
             for block in network_blocks:
                 all_parameters += list(block.parameters())
-            # optim = torch.optim.Adam(all_parameters, lr)  # Todo: used for EMNIST, test without
             initial_epoch = 0
             optim = torch.optim.SGD(all_parameters, lr, momentum=0.9, weight_decay=5e-4)
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=max_epochs)
@@ -975,13 +897,8 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
         else:
             raise NotImplementedError("Experiment {} not implemented".format(experiment))
 
-        # We want to check for early stopping after approximately equal number of batches:
-        # val_freq = len(trn_dls[0]) // len(corruption_names)
-        # logger.info("Validation frequency: every {} batches".format(val_freq))
-
         # Train Loop
         for epoch in range(initial_epoch, max_epochs):
-            # Training
             if "Modules" not in experiment:
                 for block in network_blocks:
                     block.train()
@@ -1016,8 +933,8 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
                     epoch_acc += acc
                 elif "Modules" in experiment:
                     ce_loss, ctv_loss, acc = modules_forwards_pass(network_blocks, module, module_level, x_trn, y_trn,
-                                                                   cross_entropy_loss_fn, accuracy_fn, contrastive_loss_fn,
-                                                                   weight, single_corr_bs)
+                                                                   cross_entropy_loss_fn, accuracy_fn,
+                                                                   contrastive_loss_fn, weight, single_corr_bs)
                     loss = ce_loss + ctv_loss
                     epoch_ce_loss += ce_loss.item()
                     epoch_ctv_loss += ctv_loss.item()
@@ -1115,14 +1032,6 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
             if early_stoppings[0].early_stop:
                 logger.info("Early stopping")
                 break
-            # if "Modules" not in experiment:
-            #     for block in network_blocks:
-            #         block.train()
-            # else:
-            #     module.train()
-            #
-            # if early_stoppings[0].early_stop:
-            #     break
 
         # Save model
         logger.info("Loading early stopped checkpoints")
@@ -1219,7 +1128,7 @@ if __name__ == "__main__":
         raise ValueError("Dataset {} not implemented".format(args.dataset))
 
     # Set seeding
-    reset_rngs(seed=369121518, deterministic=True)
+    reset_rngs(seed=48121620, deterministic=True)
     # reset_rngs(seed=1357911, deterministic=True)
     # reset_rngs(seed=246810, deterministic=True)
 
@@ -1245,7 +1154,7 @@ if __name__ == "__main__":
         all_corruptions = pickle.load(f)
 
     corruptions = []
-    # Training on only the corruptions in the composition. Always include identity at the end, remove permutations
+    # Add Identity to training and remove permutations
     for corr in all_corruptions:
         if "Identity" not in corr:
             corr.sort()
@@ -1257,41 +1166,16 @@ if __name__ == "__main__":
                 corruptions.append(corr)
         else:
             raise ValueError("Only expect the identity to appear as its own corruption")
+    assert len(corruptions) == 64  # hardcoded - number of combinations (not permutations) of corruptions
 
-    assert len(corruptions) == 64  # 64 for EMNIST 5, 128 for EMNIST4
-
-    # Using slurm to parallelise the training
-    # corruptions = corruptions[args.corruption_ID:args.corruption_ID+1]
-
-    if "Modules" in args.experiment or "ImgSpace" in args.experiment:  # For the Modules approach, we want all elemental corruptions
+    if "Modules" in args.experiment or "ImgSpace" in args.experiment:  # Train on all elemental corruptions separately
         corruptions = [corr for corr in corruptions if len(corr) == 2]
-        assert len(corruptions) == 6  # hardcoded for EMNIST5
-        corruptions = corruptions[args.corruption_ID:args.corruption_ID+1]
-    elif "Contrastive" in args.experiment or "CrossEntropy" in args.experiment:
-        # For contrastive and cross entropy we only want the case with all corruptions together
+        assert len(corruptions) == 6
+        corruptions = corruptions[args.corruption_ID:args.corruption_ID+1]  # parallelisation with slurm
+    elif "Contrastive" in args.experiment or "CrossEntropy" in args.experiment:  # Train on all corruptions together
         max_corr_count = max([len(corr) for corr in corruptions])
         corruptions = [corr for corr in corruptions if len(corr) == max_corr_count]
         assert len(corruptions) == 1
-
-    """
-    If running on polestar
-    CUDA_VISIBLE_DEVICES=4 python train.py --pin-mem --check-if-run --corruption-ID 0 -experiment CrossEntropy
-    CUDA_VISIBLE_DEVICES=4 python train.py --pin-mem --check-if-run --corruption-ID 34 --vis-data --experiment Contrastive --weights  1,1,1,1,1,1
-    CUDA_VISIBLE_DEVICES=4 python train.py --pin-mem --check-if-run --corruption-ID 0 --experiment Modules --weights 1,1,1,1,1,1
-    CUDA_VISIBLE_DEVICES=4 python train.py --pin-mem --check-if-run --corruption-ID 0 --experiment ImgSpace
-    
-    CUDA_VISIBLE_DEVICES=4 python train.py --pin-mem --check-if-run --corruption-ID 0 --dataset CIFAR --total-n-classes 10 --max-epochs 200 --lr 1e-3 --experiment Modules --weights 1,1,1,1,1,1,1,1,1,1
-    CUDA_VISIBLE_DEVICES=5 python train.py --pin-mem --check-if-run --corruption-ID 0 --dataset FACESCRUB --total-n-classes 388 --max-epochs 200 --experiment Modules --weights 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
-    
-    The below does decently - about 80-82% validation (with no augmentation)
-    CUDA_VISIBLE_DEVICES=5 python train.py --pin-mem --check-if-run --corruption-ID 0 --dataset FACESCRUB --total-n-classes 388 --experiment Modules --weights 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
-    
-    For module identity training on polestar with new code 
-    CUDA_VISIBLE_DEVICES=4 python train.py --pin-mem --check-if-run --corruption-ID 0 --experiment Modules --dataset EMNIST --total-n-classes 47 --max-epochs 200 --lr 1e-1 --weight 1
-    CUDA_VISIBLE_DEVICES=5 python train.py --pin-mem --check-if-run --corruption-ID 0 --experiment Modules --dataset CIFAR --total-n-classes 10 --max-epochs 200 --lr 1e-1 --weight 1
-    CUDA_VISIBLE_DEVICES=6 python train.py --pin-mem --check-if-run --corruption-ID 0 --experiment Modules --dataset FACESCRUB --total-n-classes 388 --max-epochs 200 --lr 1e-1 --weight 1
-
-    """
 
     # Searching learning rates. Change --array=0-47 to --array=0-191
     # assert len(corruptions) == 48  # for EMNIST3

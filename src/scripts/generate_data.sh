@@ -3,7 +3,7 @@
 #SBATCH -N 1                         #  one node
 #SBATCH -n 2                         #  CPU cores
 #SBATCH --mem=12G                    #  RAM
-#SBATCH --array=0-6                  #  EMNIST5: 167 corruptions (0-166). CIFAR/FACESCRUB 7 elemental corruptions (0-6)
+#SBATCH --array=0-6                  #  Generate the 7 elemental corruptions
 #SBATCH -o /om2/user/imason/compositions/slurm/EMNIST5/slurm-%j.out    # file to send output to
 
 cd data/

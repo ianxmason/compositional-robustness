@@ -6,11 +6,9 @@ from itertools import combinations, permutations
 
 random.seed(2778)
 root_dir = "/om2/user/imason/compositions/datasets/"
-output_dir = os.path.join(root_dir, "EMNIST5/")
+output_dir = os.path.join(root_dir, "EMNIST/")
 
-# Which corruptions to use - EMNIST4
-# base_corruption_names = ['Contrast', 'GaussianBlur', 'ImpulseNoise', 'Invert', 'Mirror', 'Rotate180', 'Rotate90']
-# Which corruptions to use - EMNIST5
+# Which corruptions to use
 base_corruption_names = ['Contrast', 'GaussianBlur', 'ImpulseNoise', 'Invert', 'Rotate90', 'Swirl']
 
 # All elemental corruptions. (7 base elementals)

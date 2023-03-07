@@ -1,10 +1,29 @@
 # compositions
 Which neural mechanisms underpin combinatorial generalisation?
 
+### Dependencies
+Currently using which container
+May be good to make container specific to project
+
 ### Openmind/Slurm
 Run files in the scripts folder from the src directory (e.g. sbatch scripts/train_compositions.sh)
 
 ### To run
+
+One time things
+- Generate corruptions.pkl (should be length 167, mostly for testing, also used in training)
+- Generate data (just elementals??)
+
+Training (a figure to explain)
+- Monolithic training (contrastive, cross entropy)
+- Modular training (modulels, autoencoders)
+- Identity training (pre-modules, post-autoencoders)
+
+Testing
+- Explain test.sh
+
+Analysis
+- Plotting etc.
 
 Run each line in train.sh on openmind
 Should create ckpts and logs for each method

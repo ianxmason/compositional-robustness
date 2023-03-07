@@ -236,7 +236,6 @@ class Swirl(Corruption):
 
 # ---------------------------------- GENERAL -----------------------------------
 
-
 def denormalize_255(x, mean, std):
     x[:, 0, :, :] = x[:, 0, :, :] * std[0] + mean[0]
     x[:, 1, :, :] = x[:, 1, :, :] * std[1] + mean[1]

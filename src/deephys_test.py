@@ -17,7 +17,6 @@ from lib.networks import create_emnist_network, create_emnist_modules, create_em
                          create_cifar_network, create_cifar_modules, create_cifar_autoencoder, \
                          create_facescrub_network, create_facescrub_modules, create_facescrub_autoencoder
 from lib.utils import *
-from lib.equivariant_hooks import *
 
 # import deephys as dp
 
