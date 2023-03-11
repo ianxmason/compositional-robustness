@@ -141,6 +141,8 @@ if __name__ == "__main__":
     # PARAMS
     parser = argparse.ArgumentParser(description='Generate multiple corruptions in parallel.')
     parser.add_argument('--corruption-ID', type=int, default=0, help="which corruption to generate")
+    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/',
+                        help="path to directory containing directories of different corruptions")
     args = parser.parse_args()
 
     create_datasets = True
@@ -148,13 +150,12 @@ if __name__ == "__main__":
     seed = 1234
 
     # PATHS
-    root_dir = "/om2/user/imason/compositions/datasets/"
-    output_dir = os.path.join(root_dir, "CIFAR/")
+    output_dir = os.path.join(args.data_root, "CIFAR/")
     mkdir_p(output_dir)
 
     if create_datasets:
         # LOAD CIFAR DATA
-        all_data = _get_cifar_datasets(root_dir)
+        all_data = _get_cifar_datasets(args.data_root)
         dset_names = ['train', 'valid', 'test']
         np.random.seed(seed)
         for (sorted_imgs, sorted_labels), dset_name in zip(all_data, dset_names):

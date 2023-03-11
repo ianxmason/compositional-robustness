@@ -19,6 +19,6 @@ for corruptions in os.listdir(data_dir):
         mkdir_p(os.path.join(save_dir, corruptions))
         for split in ['train', 'valid', 'test']:
             mkdir_p(os.path.join(save_dir, corruptions, split))
-            img_path = os.path.join(data_dir, corruptions, split, '25', '0.png')
+            img_path = os.path.join(data_dir, corruptions, split, '7', '0.png')
             # Copy image to save_dir
             shutil.copyfile(img_path, os.path.join(save_dir, corruptions, split, '0.png'))

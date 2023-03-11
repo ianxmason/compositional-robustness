@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -t 24:00:00                  #  walltime hh:mm:ss
+#SBATCH -t 30:00:00                  #  walltime hh:mm:ss
 #SBATCH -N 1                         #  one node
 #SBATCH -n 4                         #  CPU cores
 #SBATCH -x dgx001,dgx002,node[031,034,055,056,058,061,063,069,078,082,083,091,092]
@@ -17,19 +17,19 @@ module load openmind/singularity/3.5.0
 
 ### EMNIST ###
 # Modules - Hardcoded Locations
-#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "EMNIST" --experiment "Modules" --total-n-classes 47 --max-epochs 200 --lr 1e-2 --weight 1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/imason/singularity/imason-pytorch.simg python train.py --dataset "EMNIST" --experiment "Modules" --total-n-classes 47 --max-epochs 200 --lr 1e-2 --weight 1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
 # Modules - Automatic Locations
-#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "EMNIST" --experiment "AutoModules" --total-n-classes 47 --max-epochs 200 --lr 1e-2 --weight 1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/imason/singularity/imason-pytorch.simg python train.py --dataset "EMNIST" --experiment "AutoModules" --total-n-classes 47 --max-epochs 200 --lr 1e-2 --weight 1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
 # ImgSpace - Train Autoencoders
-#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "EMNIST" --experiment "ImgSpace" --total-n-classes 47 --max-epochs 200 --lr 1e-2 --corruption-ID $SLURM_ARRAY_TASK_ID --n-workers 4 --check-if-run
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/imason/singularity/imason-pytorch.simg python train.py --dataset "EMNIST" --experiment "ImgSpace" --total-n-classes 47 --max-epochs 200 --lr 0.001 --corruption-ID $SLURM_ARRAY_TASK_ID --n-workers 4 --check-if-run
 
 ### CIFAR ###
 # Modules - Hardcoded Locations
-#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "CIFAR" --experiment "Modules" --total-n-classes 10 --max-epochs 200 --lr 1e-2 --weight 1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/imason/singularity/imason-pytorch.simg python train.py --dataset "CIFAR" --experiment "Modules" --total-n-classes 10 --max-epochs 200 --lr 1e-2 --weight 1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
 # Modules - Automatic Locations
-#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "CIFAR" --experiment "AutoModules" --total-n-classes 10 --max-epochs 200 --lr 1e-2 --weight 1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/imason/singularity/imason-pytorch.simg python train.py --dataset "CIFAR" --experiment "AutoModules" --total-n-classes 10 --max-epochs 200 --lr 1e-2 --weight 1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
 # ImgSpace - Train Autoencoders
-#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "CIFAR" --experiment "ImgSpace" --total-n-classes 10 --max-epochs 200 --lr 1e-2 --corruption-ID $SLURM_ARRAY_TASK_ID --n-workers 4 --check-if-run
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/imason/singularity/imason-pytorch.simg python train.py --dataset "CIFAR" --experiment "ImgSpace" --total-n-classes 10 --max-epochs 200 --lr 1e-2 --corruption-ID $SLURM_ARRAY_TASK_ID --n-workers 4 --check-if-run
 
 
 ### FACESCRUB ###

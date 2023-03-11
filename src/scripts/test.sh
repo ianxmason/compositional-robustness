@@ -32,13 +32,13 @@ module load openmind/singularity/3.5.0
 jobs_per_gpu=4
 for ((number=0; number<$jobs_per_gpu; number++))
 do
-  singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg \
+  singularity exec --nv -B /om,/om2/user/$USER /om2/user/imason/singularity/imason-pytorch.simg \
               python test.py --pin-mem \
                              --check-if-run \
-                             --test-all \
                              --dataset "FACESCRUB" \
                              --total-n-classes 388 \
                              --experiment "AutoModules" \
+                             --validate \
                              --num-processes $(($SLURM_ARRAY_TASK_COUNT * $jobs_per_gpu)) \
                              --process $(($SLURM_ARRAY_TASK_ID * $jobs_per_gpu + $number)) &
 done

@@ -92,39 +92,29 @@ def autoencoders_loss_and_accuracy(all_ae_blocks, clsf_blocks, dataloader, dev):
     # 1. the earlier the corruption is in the test corruption name the earlier the autoencoder is applied
     test_loss = 0.0
     test_acc = 0.0
+    collected_imgs = False
     with torch.no_grad():
         for data_tuple in dataloader:
             x_tst, y_tst = data_tuple[0].to(dev), data_tuple[1].to(dev)
             features = x_tst
 
-            # # Sanity check to comment in for visualising before and after autoencoding
-            # vis_path = '/om2/user/imason/compositions/figs/CIFAR/visualisations/'
-            # fig_name = "before_ae.png"
-            # fig_path = os.path.join(vis_path, fig_name)
-            # # Denormalise Images
-            # x = features.detach().cpu().numpy()
-            # y = y_tst.detach().cpu().numpy()
-            # x = dt.denormalize_255(x, np.array(CIFAR10_MEAN).astype(np.float32),
-            #                        np.array(CIFAR10_STD).astype(np.float32)).astype(np.uint8)
-            # # And visualise
-            # visualise_data(x[:25], y[:25], save_path=fig_path, title=fig_name[:-4], n_rows=5, n_cols=5)
+            # Visualise images before autoencoding
+            if not collected_imgs:
+                pre_ae_imgs = features.detach().cpu().numpy()
+                pre_ae_lbls = y_tst.detach().cpu().numpy()
 
+            # Apply autoencoders
             for ae_blocks in all_ae_blocks:
                 for block in ae_blocks:
                     features = block(features)
 
-            # vis_path = '/om2/user/imason/compositions/figs/CIFAR/visualisations/'
-            # fig_name = "after_ae.png"
-            # fig_path = os.path.join(vis_path, fig_name)
-            # # Denormalise Images
-            # x = features.detach().cpu().numpy()
-            # y = y_tst.detach().cpu().numpy()
-            # x = dt.denormalize_255(x, np.array(CIFAR10_MEAN).astype(np.float32),
-            #                        np.array(CIFAR10_STD).astype(np.float32)).astype(np.uint8)
-            # # And visualise
-            # visualise_data(x[:25], y[:25], save_path=fig_path, title=fig_name[:-4], n_rows=5, n_cols=5)
-            # print(2/0)  # break execution - only need one batch to check
+            # Visualise images after autoencoding
+            if not collected_imgs:
+                post_ae_imgs = features.detach().cpu().numpy()
+                post_ae_lbls = y_tst.detach().cpu().numpy()
+                collected_imgs = True
 
+            # Classify autoencoder outputs
             for j, block in enumerate(clsf_blocks):
                 if j != len(clsf_blocks) - 1:
                     features = block(features)
@@ -136,105 +126,11 @@ def autoencoders_loss_and_accuracy(all_ae_blocks, clsf_blocks, dataloader, dev):
             test_loss += loss.item()
             test_acc += acc
 
-    return test_loss / len(dataloader), test_acc / len(dataloader)
+    return test_loss / len(dataloader), test_acc / len(dataloader), pre_ae_imgs, pre_ae_lbls, post_ae_imgs, post_ae_lbls
 
 
-def test_specific(experiment, dataset, data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers,
-                  pin_mem, dev, check_if_run, total_processes, process):
-    """
-    Take every checkpoint and test on the composition of the corruptions trained on
-
-    Parallelise by testing different checkpoints in different processes
-    """
-    files = os.listdir(ckpt_path)
-    for f in files:
-        if "es_" == f[:3]:
-            raise ValueError("Early stopping ckpt found {}. Training hasn't finished yet".format(f))
-    # First select only the files that use the correct experiment and remove the experiment name and network block name
-    files = ['_'.join(f.split('_')[2:]) for f in files if f.split('_')[0] == experiment]
-    # Then remove duplicates that come from the network blocks
-    files = list(set(files))
-    files.sort()
-    assert len(files) == 64  # hardcoded for EMNIST. 128 EMNIST4. 64 EMNIST5.
-    assert total_processes <= len(files)
-    assert process < total_processes
-
-    files_per_process = len(files) // total_processes
-    if process == total_processes - 1:
-        files = files[files_per_process * process:]
-    else:
-        files = files[files_per_process * process:files_per_process * (process + 1)]
-
-    for ckpt in files:
-        # Load each ckpt
-        if check_if_run and os.path.exists(os.path.join(save_path, "{}_{}_losses.pkl".format(experiment, ckpt[:-3]))):
-            print("Pickle file already exists at {}. \n Skipping testing for {}".format(
-                os.path.join(save_path, "{}_{}_losses.pkl".format(experiment, ckpt[:-3])), ckpt))
-            sys.stdout.flush()
-            continue
-        else:
-            if dataset == "EMNIST":
-                network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, experiment,
-                                                                                 ckpt[:-3].split('-'), dev)
-            elif dataset == "CIFAR":
-                network_blocks, network_block_ckpt_names = create_cifar_network(total_n_classes, experiment,
-                                                                                 ckpt[:-3].split('-'), dev)
-            elif dataset == "FACESCRUB":
-                network_blocks, network_block_ckpt_names = create_facescrub_network(total_n_classes, experiment,
-                                                                                 ckpt[:-3].split('-'), dev)
-            for block, block_ckpt_name in zip(network_blocks, network_block_ckpt_names):
-                block.load_state_dict(torch.load(os.path.join(ckpt_path, block_ckpt_name)))
-
-        # Test the trained model on all permutations of the composition of the corruptions it was trained on
-        corruptions = ckpt[:-3].split('-')
-        if len(corruptions) > 1:
-            corruptions.remove('Identity')
-        corruption_accs = {}
-        corruption_losses = {}
-        # Todo: this has not been updated with the new loading of test corruptions from file rather than
-        #  from os.listdir(data_root). If we use this method we will need to update
-        for test_corruption in os.listdir(data_root):
-            if test_corruption == "raw" or test_corruption == "corruption_names.pkl":
-                continue
-            if set(test_corruption.split('-')) != set(corruptions):
-                continue
-
-            print("Testing {} on composition {}".format(ckpt, test_corruption))
-            sys.stdout.flush()
-            trained_classes = list(range(total_n_classes))
-
-            # Old Version
-            # corruption_path = os.path.join(data_root, test_corruption)
-            # _, _, tst_dl = get_static_emnist_dataloaders(corruption_path, trained_classes, batch_size, False,
-            #                                              n_workers, pin_mem)
-
-            identity_path = os.path.join(data_root, "Identity")
-            if dataset == "EMNIST":
-                transforms = [torchvision.transforms.Lambda(lambda im: im.convert('L'))]
-                transforms += [getattr(dt, c)() for c in test_corruption]
-                transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='L'))]
-                transforms += [torchvision.transforms.Lambda(lambda im: im.convert('RGB'))]
-            else:
-                transforms = [getattr(dt, c)() for c in test_corruption]
-                transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='RGB'))]
-            _, _, tst_dl = get_transformed_static_dataloaders(dataset, identity_path, transforms, trained_classes,
-                                                              batch_size, False, n_workers, pin_mem)
-
-            tst_loss, tst_acc = loss_and_accuracy(network_blocks, tst_dl, dev)
-            corruption_accs[test_corruption] = tst_acc
-            corruption_losses[test_corruption] = tst_loss
-            print("{}, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment, test_corruption, tst_loss, tst_acc))
-            sys.stdout.flush()
-
-        # Save the results
-        with open(os.path.join(save_path, "{}_{}_accs.pkl".format(experiment, ckpt[:-3])), "wb") as f:
-            pickle.dump(corruption_accs, f)
-        with open(os.path.join(save_path, "{}_{}_losses.pkl".format(experiment, ckpt[:-3])), "wb") as f:
-            pickle.dump(corruption_losses, f)
-
-
-def test_all(experiment, dataset, data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers, pin_mem, dev,
-             check_if_run, total_processes, process):
+def test_all(experiment, validate, dataset, data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers,
+             pin_mem, dev, check_if_run, total_processes, process):
     """
     Get the specific checkpoint trained on all corruptions and test on every composition
 
@@ -289,11 +185,6 @@ def test_all(experiment, dataset, data_root, ckpt_path, save_path, total_n_class
         sys.stdout.flush()
         trained_classes = list(range(total_n_classes))
 
-        # Old Version
-        # corruption_path = os.path.join(data_root, test_corruption)
-        # _, _, tst_dl = get_static_emnist_dataloaders(corruption_path, trained_classes, batch_size, False,
-        #                                              n_workers, pin_mem)
-
         identity_path = os.path.join(data_root, "Identity")
         if dataset == "EMNIST":
             transforms = [torchvision.transforms.Lambda(lambda im: im.convert('L'))]
@@ -303,8 +194,12 @@ def test_all(experiment, dataset, data_root, ckpt_path, save_path, total_n_class
         else:
             transforms = [getattr(dt, c)() for c in test_corruption]
             transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='RGB'))]
-        _, _, tst_dl = get_transformed_static_dataloaders(dataset, identity_path, transforms, trained_classes,
-                                                          batch_size, False, n_workers, pin_mem)
+        if validate:
+            _, tst_dl, _ = get_transformed_static_dataloaders(dataset, identity_path, transforms, trained_classes,
+                                                              batch_size, False, n_workers, pin_mem)
+        else:
+            _, _, tst_dl = get_transformed_static_dataloaders(dataset, identity_path, transforms, trained_classes,
+                                                              batch_size, False, n_workers, pin_mem)
 
         tst_loss, tst_acc = loss_and_accuracy(network_blocks, tst_dl, dev)
         corruption_accs['-'.join(test_corruption)] = tst_acc
@@ -322,8 +217,8 @@ def test_all(experiment, dataset, data_root, ckpt_path, save_path, total_n_class
         pickle.dump(corruption_losses, f)
 
 
-def test_modules(experiment, dataset, data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers, pin_mem,
-                 dev, check_if_run, total_processes, process):
+def test_modules(experiment, validate, dataset, data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers,
+                 pin_mem, dev, check_if_run, total_processes, process):
     """
     Get the specific checkpoint trained on all corruptions and test on every composition
 
@@ -382,15 +277,10 @@ def test_modules(experiment, dataset, data_root, ckpt_path, save_path, total_n_c
     corruption_accs = {}
     corruption_losses = {}
 
-    # Old Version
-    # corruptions = os.listdir(data_root)
-    # corruptions = [c for c in corruptions if c != "raw" and c != "corruption_names.pkl"]
-    # corruptions.sort()
-
     with open(os.path.join(args.data_root, "corruption_names.pkl"), "rb") as f:
         corruptions = pickle.load(f)
     corruptions.sort()
-    assert len(corruptions) == 167  # hardcoded for EMNIST. 149 EMNIST4. 167 EMNIST5.
+    assert len(corruptions) == 167
     assert total_processes <= len(corruptions)
     assert process < total_processes
 
@@ -404,11 +294,6 @@ def test_modules(experiment, dataset, data_root, ckpt_path, save_path, total_n_c
         print("Testing on {}".format(test_corruption))
         sys.stdout.flush()
         trained_classes = list(range(total_n_classes))
-
-        # Old Version
-        # corruption_path = os.path.join(data_root, test_corruption)
-        # _, _, tst_dl = get_static_emnist_dataloaders(corruption_path, trained_classes, batch_size, False,
-        #                                              n_workers, pin_mem)
 
         # _, _, tst_dl = get_static_dataloaders(dataset,os.path.join(data_root, "Contrast"), trained_classes, batch_size,
         #                                       False, n_workers, pin_mem)
@@ -432,8 +317,12 @@ def test_modules(experiment, dataset, data_root, ckpt_path, save_path, total_n_c
         else:
             transforms = [getattr(dt, c)() for c in test_corruption]
             transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='RGB'))]
-        _, _, tst_dl = get_transformed_static_dataloaders(dataset, identity_path, transforms, trained_classes,
-                                                          batch_size, False, n_workers, pin_mem)
+        if validate:
+            _, tst_dl, _ = get_transformed_static_dataloaders(dataset, identity_path, transforms, trained_classes,
+                                                              batch_size, False, n_workers, pin_mem)
+        else:
+            _, _, tst_dl = get_transformed_static_dataloaders(dataset, identity_path, transforms, trained_classes,
+                                                              batch_size, False, n_workers, pin_mem)
 
         # vis_path = '/om2/user/imason/compositions/figs/EMNIST_TEMP/'
         # x, y = next(iter(tst_dl))
@@ -473,8 +362,8 @@ def test_modules(experiment, dataset, data_root, ckpt_path, save_path, total_n_c
         pickle.dump(corruption_losses, f)
 
 
-def test_autoencoders(experiment, dataset, data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers,
-                      pin_mem, dev, check_if_run, total_processes, process):
+def test_autoencoders(experiment, validate, dataset, data_root, ckpt_path, save_path, vis_path, total_n_classes,
+                      batch_size, n_workers, pin_mem, dev, check_if_run, total_processes, process):
     """
     Get the specific checkpoint trained on all corruptions and test on every composition
 
@@ -520,13 +409,16 @@ def test_autoencoders(experiment, dataset, data_root, ckpt_path, save_path, tota
         if dataset == "EMNIST":
             id_clsf_blocks, id_clsf_block_ckpt_names = create_emnist_network(total_n_classes, experiment + "Classifier",
                                                                              ["Identity"], dev)
+            denorm_mean, denorm_std = EMNIST_MEAN, EMNIST_STD
         elif dataset == "CIFAR":
             id_clsf_blocks, id_clsf_block_ckpt_names = create_cifar_network(total_n_classes, experiment + "Classifier",
                                                                              ["Identity"], dev)
+            denorm_mean, denorm_std = CIFAR10_MEAN, CIFAR10_STD
         elif dataset == "FACESCRUB":
             id_clsf_blocks, id_clsf_block_ckpt_names = create_facescrub_network(total_n_classes,
                                                                                 experiment + "Classifier",
                                                                                 ["Identity"], dev)
+            denorm_mean, denorm_std = FACESCRUB_MEAN, FACESCRUB_STD
         for block, block_ckpt_name in zip(id_clsf_blocks, id_clsf_block_ckpt_names):
             block.load_state_dict(torch.load(os.path.join(ckpt_path, block_ckpt_name)))
             print("Loaded {}".format(block_ckpt_name))
@@ -577,11 +469,6 @@ def test_autoencoders(experiment, dataset, data_root, ckpt_path, save_path, tota
         sys.stdout.flush()
         trained_classes = list(range(total_n_classes))
 
-        # Old Version
-        # corruption_path = os.path.join(data_root, test_corruption)
-        # _, _, tst_dl = get_static_emnist_dataloaders(corruption_path, trained_classes, batch_size, False,
-        #                                              n_workers, pin_mem)
-
         identity_path = os.path.join(data_root, "Identity")
         if dataset == "EMNIST":
             transforms = [torchvision.transforms.Lambda(lambda im: im.convert('L'))]
@@ -591,8 +478,12 @@ def test_autoencoders(experiment, dataset, data_root, ckpt_path, save_path, tota
         else:
             transforms = [getattr(dt, c)() for c in test_corruption]
             transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='RGB'))]
-        _, _, tst_dl = get_transformed_static_dataloaders(dataset, identity_path, transforms, trained_classes,
-                                                          batch_size, False, n_workers, pin_mem)
+        if validate:
+            _, tst_dl, _ = get_transformed_static_dataloaders(dataset, identity_path, transforms, trained_classes,
+                                                              batch_size, False, n_workers, pin_mem)
+        else:
+            _, _, tst_dl = get_transformed_static_dataloaders(dataset, identity_path, transforms, trained_classes,
+                                                              batch_size, False, n_workers, pin_mem)
 
         test_ae_blocks = []
         for c in test_corruption:
@@ -604,7 +495,8 @@ def test_autoencoders(experiment, dataset, data_root, ckpt_path, save_path, tota
                         print("Selected autoencoder {}".format(block_ckpt_names))
                         test_ae_blocks.append(blocks)
 
-        tst_loss, tst_acc = autoencoders_loss_and_accuracy(test_ae_blocks, id_clsf_blocks, tst_dl, dev)
+        tst_loss, tst_acc, pre_ae_imgs, pre_ae_lbls, post_ae_imgs, post_ae_lbls = \
+            autoencoders_loss_and_accuracy(test_ae_blocks, id_clsf_blocks, tst_dl, dev)
         id_clsf_corruption_accs['-'.join(test_corruption)] = tst_acc
         id_clsf_corruption_losses['-'.join(test_corruption)] = tst_loss
         print("{} Identity Classifier, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment,
@@ -612,13 +504,28 @@ def test_autoencoders(experiment, dataset, data_root, ckpt_path, save_path, tota
                                                                                        tst_loss, tst_acc))
         sys.stdout.flush()
 
-        tst_loss, tst_acc = autoencoders_loss_and_accuracy(test_ae_blocks, all_clsf_blocks, tst_dl, dev)
+        tst_loss, tst_acc, _, _, _, _ = autoencoders_loss_and_accuracy(test_ae_blocks, all_clsf_blocks, tst_dl,
+                                                                                dev)
         all_clsf_corruption_accs['-'.join(test_corruption)] = tst_acc
         all_clsf_corruption_losses['-'.join(test_corruption)] = tst_loss
         print("{} Joint Classifier, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment,
                                                                                     '-'.join(test_corruption),
                                                                                     tst_loss, tst_acc))
         sys.stdout.flush()
+
+        # Visualise the autoencoder input and output
+        fig_name = "before_ae_{}.png".format('-'.join(test_corruption))
+        fig_path = os.path.join(vis_path, fig_name)
+        pre_ae_imgs = dt.denormalize_255(pre_ae_imgs, np.array(denorm_mean).astype(np.float32),
+                                         np.array(denorm_std).astype(np.float32)).astype(np.uint8)
+        visualise_data(pre_ae_imgs[:25], pre_ae_lbls[:25], save_path=fig_path, title=fig_name[:-4], n_rows=5, n_cols=5)
+
+        fig_name = "after_ae_{}.png".format('-'.join(test_corruption))
+        fig_path = os.path.join(vis_path, fig_name)
+        post_ae_imgs = dt.denormalize_255(post_ae_imgs, np.array(denorm_mean).astype(np.float32),
+                                          np.array(denorm_std).astype(np.float32)).astype(np.uint8)
+        visualise_data(post_ae_imgs[:25], post_ae_lbls[:25], save_path=fig_path, title=fig_name[:-4], n_rows=5,
+                       n_cols=5)
 
     # Save the results
     with open(os.path.join(save_path, "{}_all_accs_process_{}_of_{}.pkl".format(experiment + "IdentityClassifier",
@@ -634,6 +541,7 @@ def test_autoencoders(experiment, dataset, data_root, ckpt_path, save_path, tota
                                                                                   process, total_processes)), "wb") as f:
         pickle.dump(all_clsf_corruption_losses, f)
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Args to test networks on all corruptions in a given directory.')
     parser.add_argument('--dataset', type=str, default='EMNIST', help="which dataset to use")
@@ -643,14 +551,13 @@ if __name__ == "__main__":
                         help="path to directory to save checkpoints")
     parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/results/',
                         help="path to directory to save test accuracies and losses")
+    parser.add_argument('--vis-path', type=str, default='/om2/user/imason/compositions/figs/',
+                        help="path to directory to save autoencoder visualisations")
     parser.add_argument('--experiment', type=str, default='CrossEntropy',
                         help="which method to use. CrossEntropy or Contrastive or Modules.")
+    parser.add_argument('--validate', action='store_true', help="If set, uses the validation rather than the test set")
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
     parser.add_argument('--batch-size', type=int, default=256, help="batch size")
-    parser.add_argument('--test-all', action='store_true', help="if true tests the model trained on all corruptions on"
-                                                                " all compositions, if false tests the model trained on"
-                                                                " specific corruptions on the available compositions of"
-                                                                " those corruptions")
     parser.add_argument('--n-workers', type=int, default=2, help="number of workers (PyTorch)")
     parser.add_argument('--pin-mem', action='store_true', help="set to turn pin memory on (PyTorch)")
     parser.add_argument('--cpu', action='store_true', help="set to train with the cpu (PyTorch) - untested")
@@ -664,7 +571,8 @@ if __name__ == "__main__":
         raise ValueError("Dataset {} not implemented".format(args.dataset))
 
     # Set seeding
-    reset_rngs(seed=246810, deterministic=True)
+    seed = 48121620
+    reset_rngs(seed=seed, deterministic=True)
 
     # Set device
     if args.cpu:
@@ -675,33 +583,27 @@ if __name__ == "__main__":
         dev = torch.device('cuda')
 
     # Set up and create unmade directories
+    variance_dir_name = f"lr-0.1_weight-0.1"  # f"seed-{seed}"
     args.data_root = os.path.join(args.data_root, args.dataset)
-    args.ckpt_path = os.path.join(args.ckpt_path, args.dataset)
-    args.save_path = os.path.join(args.save_path, args.dataset)
+    args.ckpt_path = os.path.join(args.ckpt_path, args.dataset, variance_dir_name)
+    args.save_path = os.path.join(args.save_path, args.dataset, variance_dir_name)
+    args.vis_path = os.path.join(args.vis_path, args.dataset, "autoencoder_visualisations", variance_dir_name)
     mkdir_p(args.save_path)
+    if "ImgSpace" in args.experiment:
+        mkdir_p(args.vis_path)
 
     print("Running process {} of {}".format(args.process + 1, args.num_processes))
     sys.stdout.flush()
 
-    """
-    If running on polestar
-    CUDA_VISIBLE_DEVICES=4 python test.py --pin-mem --check-if-run --dataset EMNIST --experiment Modules --num-processes 10 --process 0
-    """
-
     if "Modules" in args.experiment:
-        test_modules(args.experiment, args.dataset, args.data_root, args.ckpt_path, args.save_path,
+        test_modules(args.experiment, args.validate, args.dataset, args.data_root, args.ckpt_path, args.save_path,
                      args.total_n_classes, args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run,
                      args.num_processes, args.process)
     elif "ImgSpace" in args.experiment:
-        test_autoencoders(args.experiment, args.dataset, args.data_root, args.ckpt_path, args.save_path,
-                          args.total_n_classes, args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run,
-                          args.num_processes, args.process)
-    elif args.test_all:
-        test_all(args.experiment, args.dataset, args.data_root, args.ckpt_path, args.save_path, args.total_n_classes,
-                 args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run, args.num_processes,
-                 args.process)
+        test_autoencoders(args.experiment, args.validate, args.dataset, args.data_root, args.ckpt_path, args.save_path,
+                          args.vis_path, args.total_n_classes, args.batch_size, args.n_workers, args.pin_mem, dev,
+                          args.check_if_run, args.num_processes, args.process)
     else:
-        test_specific(args.experiment, args.dataset, args.data_root, args.ckpt_path, args.save_path,
-                      args.total_n_classes, args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run,
-                      args.num_processes, args.process)
-
+        test_all(args.experiment, args.validate, args.dataset, args.data_root, args.ckpt_path, args.save_path,
+                 args.total_n_classes, args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run,
+                 args.num_processes, args.process)

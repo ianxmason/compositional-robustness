@@ -148,6 +148,8 @@ if __name__ == "__main__":
     # PARAMS
     parser = argparse.ArgumentParser(description='Generate multiple EMNIST corruptions in parallel.')
     parser.add_argument('--corruption-ID', type=int, default=0, help="which corruption to generate")
+    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/',
+                        help="path to directory containing directories of different corruptions")
     args = parser.parse_args()
 
     create_datasets = True
@@ -155,17 +157,15 @@ if __name__ == "__main__":
     seed = 1234
 
     # PATHS
-    root_dir = "/om2/user/imason/compositions/datasets/"
-    output_dir = os.path.join(root_dir, "EMNIST/")
-
+    output_dir = os.path.join(args.data_root, "EMNIST/")
 
     if create_datasets:
         # LOAD EMNIST DATA
-        all_data = _get_emnist_datasets(root_dir)
+        all_data = _get_emnist_datasets(args.data_root)
         dset_names = ['train', 'valid', 'test']
 
-        # CREATE TARGET DATASETS: E.G. ../datasets/mnist/EMNIST/inverse/train/0/21.jpg
-        np.random.seed(seed)   # diff transforms for train, val and test sets.
+        # CREATE TARGET DATASETS: E.G. ../datasets/EMNIST/Invert/train/0/21.jpg
+        np.random.seed(seed)
         for (sorted_imgs, sorted_labels), dset_name in zip(all_data, dset_names):
             all_corruptions = [['Identity'], ['Contrast'], ['GaussianBlur'], ['ImpulseNoise'], ['Invert'],
                                ['Rotate90'], ['Swirl']]
@@ -173,7 +173,6 @@ if __name__ == "__main__":
             # with open(os.path.join(output_dir, "corruption_names.pkl"), "rb") as f:
             #     all_corruptions = pickle.load(f)
 
-            # EMNIST4 or EMNIST5
             c_names = all_corruptions[args.corruption_ID]
             corrs = [getattr(dt, c)() for c in c_names]
             c_name = '-'.join([corr.name for corr in corrs])

@@ -1109,7 +1109,7 @@ if __name__ == "__main__":
     parser.add_argument('--experiment', type=str, default='CrossEntropy',
                         help="which method to use. CrossEntropy or Contrastive or Modules.")
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
-    parser.add_argument('--max-epochs', type=int, default=50, help="max number of training epochs")
+    parser.add_argument('--max-epochs', type=int, default=200, help="max number of training epochs")
     parser.add_argument('--batch-size', type=int, default=256, help="batch size")
     parser.add_argument('--lr', type=float, default=1e-3, help="learning rate")
     parser.add_argument('--n-workers', type=int, default=2, help="number of workers (PyTorch)")
@@ -1128,9 +1128,8 @@ if __name__ == "__main__":
         raise ValueError("Dataset {} not implemented".format(args.dataset))
 
     # Set seeding
-    reset_rngs(seed=48121620, deterministic=True)
-    # reset_rngs(seed=1357911, deterministic=True)
-    # reset_rngs(seed=246810, deterministic=True)
+    seed = 48121620
+    reset_rngs(seed=seed, deterministic=True)
 
     # Set device
     if args.cpu:
@@ -1141,10 +1140,11 @@ if __name__ == "__main__":
         dev = torch.device('cuda')
 
     # Set up and create unmade directories
+    variance_dir_name = f"lr-{args.lr}_weight-{args.weight}"  # f"seed-{seed}"
     args.data_root = os.path.join(args.data_root, args.dataset)
-    args.ckpt_path = os.path.join(args.ckpt_path, args.dataset)
-    args.logging_path = os.path.join(args.logging_path, args.dataset)
-    args.vis_path = os.path.join(args.vis_path, args.dataset, "visualisations")
+    args.ckpt_path = os.path.join(args.ckpt_path, args.dataset, variance_dir_name)
+    args.logging_path = os.path.join(args.logging_path, args.dataset, variance_dir_name)
+    args.vis_path = os.path.join(args.vis_path, args.dataset, "data_visualisations")
     mkdir_p(args.ckpt_path)
     mkdir_p(args.logging_path)
     if args.vis_data:
@@ -1176,13 +1176,6 @@ if __name__ == "__main__":
         max_corr_count = max([len(corr) for corr in corruptions])
         corruptions = [corr for corr in corruptions if len(corr) == max_corr_count]
         assert len(corruptions) == 1
-
-    # Searching learning rates. Change --array=0-47 to --array=0-191
-    # assert len(corruptions) == 48  # for EMNIST3
-    # lrs = [1e-1, 1e-2, 1e-3, 1e-4]
-    # exp_idx = args.corruption_ID // 48
-    # corruptions = corruptions[(args.corruption_ID % len(corruptions)):(args.corruption_ID % len(corruptions)) + 1]
-    # args.lr = lrs[exp_idx]
 
     main(corruptions, args.dataset, args.data_root, args.ckpt_path, args.logging_path, args.vis_path, args.experiment,
          args.weight, args.temperature, args.total_n_classes, args.max_epochs, args.batch_size, args.lr,
