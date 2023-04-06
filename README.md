@@ -133,6 +133,9 @@ E.g. change file name. step_one_test.py
 
 Link to sheet or csv of hyperparameter searching results.
 
+For two step methods, first step one is hparam optimised alone, then step two optimised
+on top of the best step one setting.
+
 ## Citation
 
 

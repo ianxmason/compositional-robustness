@@ -38,7 +38,6 @@ do
                              --dataset "FACESCRUB" \
                              --total-n-classes 388 \
                              --experiment "AutoModules" \
-                             --validate \
                              --num-processes $(($SLURM_ARRAY_TASK_COUNT * $jobs_per_gpu)) \
                              --process $(($SLURM_ARRAY_TASK_ID * $jobs_per_gpu + $number)) &
 done
