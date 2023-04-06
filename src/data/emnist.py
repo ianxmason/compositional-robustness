@@ -21,8 +21,12 @@ sys.path.append("../")
 import data.data_transforms as dt
 from lib.utils import mkdir_p
 
-EMNIST_MEAN = (0.17521884, 0.17521884, 0.17521884)
-EMNIST_STD = (0.33335212, 0.33335212, 0.33335212)
+# These values take black and white images from [0, 1] to [-1, 1]
+EMNIST_MEAN = (0.5, 0.5, 0.5)
+EMNIST_STD = (0.5, 0.5, 0.5)
+# Dataset statistics
+# EMNIST_MEAN = (0.17521884, 0.17521884, 0.17521884)
+# EMNIST_STD = (0.33335212, 0.33335212, 0.33335212)
 
 class StaticEMNIST(ImageFolder):
     """

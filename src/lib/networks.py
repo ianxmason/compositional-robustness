@@ -130,8 +130,7 @@ def create_emnist_modules(experiment, corruption_names, dev):
             nn.Dropout2d(0.3),
             nn.ReLU(),
             nn.ConvTranspose2d(64, 3, kernel_size=5, stride=2, padding=2, output_padding=1),
-            nn.Dropout2d(0.1)
-            # data has mean 0, std 1. so no activation
+            nn.Tanh()  # data is in range [-1, 1]
         ).to(dev)
     )
     module_ckpt_names.append("{}_ConvModule0_{}.pt".format(experiment, '-'.join(corruption_names)))  # In image space
@@ -227,8 +226,8 @@ def create_emnist_autoencoder(experiment, corruption_names, dev):
             nn.ConvTranspose2d(128, 64, kernel_size=5, stride=2, padding=2, output_padding=1),
             nn.Dropout2d(0.3),
             nn.ReLU(),
-            nn.ConvTranspose2d(64, 3, kernel_size=5, stride=2, padding=2, output_padding=1)
-            # data has mean 0, std 1. so no activation
+            nn.ConvTranspose2d(64, 3, kernel_size=5, stride=2, padding=2, output_padding=1),
+            nn.Tanh()  # data is in range [-1, 1]
         ).to(dev)
     )
     network_block_ckpt_names.append("{}_Decoder_{}.pt".format(experiment, '-'.join(corruption_names)))
