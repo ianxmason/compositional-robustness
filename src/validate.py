@@ -162,9 +162,49 @@ def val_autoencoders_mse(experiment, dataset, data_root, ckpt_path, vis_path, to
     sys.stdout.flush()
 
 
+def val_monolithic(experiment, dataset, data_root, ckpt_path, total_n_classes, batch_size, n_workers, pin_mem, dev):
+    elemental_corruptions = ["Contrast", "GaussianBlur", "ImpulseNoise", "Invert", "Rotate90", "Swirl", "Identity"]
 
-def val_monolithic():
-    pass
+    if dataset == "EMNIST":
+        network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, experiment,
+                                                                         elemental_corruptions, dev)
+    elif dataset == "CIFAR":
+        network_blocks, network_block_ckpt_names = create_cifar_network(total_n_classes, experiment,
+                                                                        elemental_corruptions, dev)
+
+    elif dataset == "FACESCRUB":
+        network_blocks, network_block_ckpt_names = create_facescrub_network(total_n_classes, experiment,
+                                                                            elemental_corruptions, dev)
+    else:
+        raise ValueError("Unknown dataset: {}".format(dataset))
+
+    for block, block_ckpt_name in zip(network_blocks, network_block_ckpt_names):
+        block.load_state_dict(torch.load(os.path.join(ckpt_path, block_ckpt_name)))
+
+    all_val_losses, all_val_accs = [], []
+    trained_classes = list(range(total_n_classes))
+    identity_path = os.path.join(data_root, "Identity")
+    for corr in elemental_corruptions:
+        if dataset == "EMNIST":  # Black and white images.
+            transforms = [torchvision.transforms.Lambda(lambda im: im.convert('L'))]
+            transforms += [getattr(dt, corr)()]
+            transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='L'))]
+            transforms += [torchvision.transforms.Lambda(lambda im: im.convert('RGB'))]
+        else:  # Color images.
+            transforms = [getattr(dt, corr)()]
+            transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='RGB'))]
+        _, val_dl, _ = get_transformed_static_dataloaders(dataset, identity_path, transforms, trained_classes,
+                                                          batch_size, False, n_workers, pin_mem)
+        val_loss, val_acc = loss_and_accuracy(network_blocks, val_dl, dev)
+        all_val_losses.append(val_loss)
+        all_val_accs.append(val_acc)
+        print("{}, {}. val loss: {:.4f}, val acc: {:.4f}".format(experiment, corr, val_loss, val_acc))
+        sys.stdout.flush()
+
+    avg_val_loss = np.mean(all_val_losses)
+    avg_val_acc = np.mean(all_val_accs)
+    print("{}. Avg val loss: {:.4f}. Avg val acc: {:.4f}.".format(experiment, avg_val_loss, avg_val_acc))
+    sys.stdout.flush()
 
 
 def val_modules():
@@ -173,6 +213,7 @@ def val_modules():
 
 def val_autoencoders():
     pass
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Args to test networks on all corruptions in a given directory.')
@@ -220,6 +261,8 @@ if __name__ == '__main__':
     """
     CUDA_VISIBLE_DEVICES=4 python validate.py --dataset EMNIST --experiment Modules --total-n-classes 47 --lr 1.0 --weight 1.0 --pin-mem 
     CUDA_VISIBLE_DEVICES=4 python validate.py --dataset EMNIST --experiment ImgSpace --total-n-classes 47 --lr 1.0 --weight 1.0 --pin-mem
+    CUDA_VISIBLE_DEVICES=4 python validate.py --dataset EMNIST --experiment CrossEntropy --total-n-classes 47 --lr 1.0 --weight 1.0 --pin-mem
+    CUDA_VISIBLE_DEVICES=4 python validate.py --dataset EMNIST --experiment Contrastive --total-n-classes 47 --lr 1.0 --weight 1.0 --pin-mem
     """
 
     if "Modules" in args.experiment:
@@ -228,3 +271,6 @@ if __name__ == '__main__':
     elif "ImgSpace" in args.experiment:
         val_autoencoders_mse("ImgSpace", args.dataset, args.data_root, args.ckpt_path, args.vis_path,
                              args.total_n_classes, args.batch_size, args.n_workers, args.pin_mem, dev)
+    elif "CrossEntropy" in args.experiment or "Contrastive" in args.experiment:
+        val_monolithic(args.experiment, args.dataset, args.data_root, args.ckpt_path, args.total_n_classes,
+                       args.batch_size, args.n_workers, args.pin_mem, dev)
