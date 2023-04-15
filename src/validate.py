@@ -11,7 +11,7 @@ import os
 import torchvision
 import torch.nn as nn
 import data.data_transforms as dt
-from test import loss_and_accuracy, modules_loss_and_accuracy
+from test import loss_and_accuracy, modules_loss_and_accuracy, autoencoders_loss_and_accuracy
 from data.data_loaders import get_transformed_static_dataloaders, get_static_dataloaders
 from data.emnist import EMNIST_MEAN, EMNIST_STD
 from data.cifar import CIFAR10_MEAN, CIFAR10_STD
@@ -271,8 +271,93 @@ def val_modules(experiment, dataset, data_root, ckpt_path, total_n_classes, batc
     sys.stdout.flush()
 
 
-def val_autoencoders():
-    pass
+def val_autoencoders(experiment, dataset, data_root, ckpt_path, total_n_classes, batch_size, n_workers, pin_mem, dev):
+    elemental_corruptions = ["Contrast", "GaussianBlur", "ImpulseNoise", "Invert", "Rotate90", "Swirl"]
+
+    # Create and load both identity trained and jointly trained classifiers
+    if dataset == "EMNIST":
+        id_clsf_blocks, id_clsf_block_ckpt_names = create_emnist_network(total_n_classes, experiment + "Classifier",
+                                                                         ["Identity"], dev)
+        jnt_clsf_blocks, jnt_clsf_block_ckpt_names = create_emnist_network(total_n_classes, experiment + "Classifier",
+                                                                           elemental_corruptions + ["Identity"], dev)
+    elif dataset == "CIFAR":
+        id_clsf_blocks, id_clsf_block_ckpt_names = create_cifar_network(total_n_classes, experiment + "Classifier",
+                                                                        ["Identity"], dev)
+        jnt_clsf_blocks, jnt_clsf_block_ckpt_names = create_cifar_network(total_n_classes, experiment + "Classifier",
+                                                                          elemental_corruptions + ["Identity"], dev)
+    elif dataset == "FACESCRUB":
+        id_clsf_blocks, id_clsf_block_ckpt_names = create_facescrub_network(total_n_classes, experiment + "Classifier",
+                                                                            ["Identity"], dev)
+        jnt_clsf_blocks, jnt_clsf_block_ckpt_names = create_facescrub_network(total_n_classes,
+                                                                              experiment + "Classifier",
+                                                                              elemental_corruptions + ["Identity"], dev)
+    else:
+        raise ValueError("Unknown dataset: {}".format(dataset))
+
+    for block, block_ckpt_name in zip(id_clsf_blocks, id_clsf_block_ckpt_names):
+        block.load_state_dict(torch.load(os.path.join(ckpt_path, block_ckpt_name)))
+        print("Loaded {}".format(block_ckpt_name))
+        print("From {}".format(os.path.join(ckpt_path, block_ckpt_name)))
+
+    for block, block_ckpt_name in zip(jnt_clsf_blocks, jnt_clsf_block_ckpt_names):
+        block.load_state_dict(torch.load(os.path.join(ckpt_path, block_ckpt_name)))
+        print("Loaded {}".format(block_ckpt_name))
+        print("From {}".format(os.path.join(ckpt_path, block_ckpt_name)))
+
+    print("Loaded both identity and joint classifiers.")
+    sys.stdout.flush()
+
+    all_id_val_losses, all_id_val_accs = [], []
+    all_jnt_val_losses, all_jnt_val_accs = [], []
+    trained_classes = list(range(total_n_classes))
+    identity_path = os.path.join(data_root, "Identity")
+    for corr in elemental_corruptions:
+        test_corruptions = [corr, "Identity"]
+        # Create and load the autoencoder
+        if dataset == "EMNIST":
+            ae_blocks, ae_block_ckpt_names = create_emnist_autoencoder(experiment, test_corruptions, dev)
+        elif dataset == "CIFAR":
+            ae_blocks, ae_block_ckpt_names = create_cifar_autoencoder(experiment, test_corruptions, dev)
+        elif dataset == "FACESCRUB":
+            ae_blocks, ae_block_ckpt_names = create_facescrub_autoencoder(experiment, test_corruptions, dev)
+        for block, block_ckpt_name in zip(ae_blocks, ae_block_ckpt_names):
+            block.load_state_dict(torch.load(os.path.join(ckpt_path, block_ckpt_name)))
+            print("Loaded {}".format(block_ckpt_name))
+            print("From {}".format(os.path.join(ckpt_path, block_ckpt_name)))
+            sys.stdout.flush()
+
+        if dataset == "EMNIST":  # Black and white images.
+            transforms = [torchvision.transforms.Lambda(lambda im: im.convert('L'))]
+            transforms += [getattr(dt, corr)()]
+            transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='L'))]
+            transforms += [torchvision.transforms.Lambda(lambda im: im.convert('RGB'))]
+        else:  # Color images.
+            transforms = [getattr(dt, corr)()]
+            transforms += [torchvision.transforms.Lambda(lambda im: Image.fromarray(np.uint8(im), mode='RGB'))]
+        _, val_dl, _ = get_transformed_static_dataloaders(dataset, identity_path, transforms, trained_classes,
+                                                          batch_size, False, n_workers, pin_mem)
+
+        id_val_loss, id_val_acc, _, _, _, _ = autoencoders_loss_and_accuracy([ae_blocks], id_clsf_blocks, val_dl, dev)
+        jnt_val_loss, jnt_val_acc, _, _, _, _ = autoencoders_loss_and_accuracy([ae_blocks], jnt_clsf_blocks, val_dl, dev)
+        all_id_val_losses.append(id_val_loss)
+        all_id_val_accs.append(id_val_acc)
+        all_jnt_val_losses.append(jnt_val_loss)
+        all_jnt_val_accs.append(jnt_val_acc)
+        print("{}, {}. Identity Classifier. val loss: {:.4f}, val acc: {:.4f}".format(experiment, corr,
+                                                                                      id_val_loss, id_val_acc))
+        print("{}, {}. Joint Classifier. val loss: {:.4f}, val acc: {:.4f}".format(experiment, corr,
+                                                                                   jnt_val_loss, jnt_val_acc))
+        sys.stdout.flush()
+
+    avg_id_val_loss = np.mean(all_id_val_losses)
+    avg_id_val_acc = np.mean(all_id_val_accs)
+    avg_jnt_val_loss = np.mean(all_jnt_val_losses)
+    avg_jnt_val_acc = np.mean(all_jnt_val_accs)
+    print("{}. Identity Classifier. Avg val loss: {:.4f}. Avg val acc: {:.4f}.".format(experiment,
+                                                                                       avg_id_val_loss, avg_id_val_acc))
+    print("{}. Joint Classifier. Avg val loss: {:.4f}. Avg val acc: {:.4f}.".format(experiment,
+                                                                                    avg_jnt_val_loss, avg_jnt_val_acc))
+    sys.stdout.flush()
 
 
 if __name__ == '__main__':
@@ -324,6 +409,7 @@ if __name__ == '__main__':
     CUDA_VISIBLE_DEVICES=4 python validate.py --dataset EMNIST --experiment CrossEntropy --total-n-classes 47 --lr 1.0 --weight 1.0 --pin-mem
     CUDA_VISIBLE_DEVICES=4 python validate.py --dataset EMNIST --experiment Contrastive --total-n-classes 47 --lr 1.0 --weight 1.0 --pin-mem
     CUDA_VISIBLE_DEVICES=4 python validate.py --dataset EMNIST --experiment AutoModules --total-n-classes 47 --lr 1.0 --weight 1.0 --pin-mem
+    CUDA_VISIBLE_DEVICES=4 python validate.py --dataset EMNIST --experiment ImgSpace --total-n-classes 47 --lr 1.0 --weight 1.0 --pin-mem
     """
 
     if "Modules" in args.experiment:
@@ -332,8 +418,10 @@ if __name__ == '__main__':
         val_modules(args.experiment, args.dataset, args.data_root, args.ckpt_path, args.total_n_classes,
                     args.batch_size, args.n_workers, args.pin_mem, dev)
     elif "ImgSpace" in args.experiment:
-        val_autoencoders_mse("ImgSpace", args.dataset, args.data_root, args.ckpt_path, args.vis_path,
-                             args.total_n_classes, args.batch_size, args.n_workers, args.pin_mem, dev)
+        # val_autoencoders_mse("ImgSpace", args.dataset, args.data_root, args.ckpt_path, args.vis_path,
+        #                      args.total_n_classes, args.batch_size, args.n_workers, args.pin_mem, dev)
+        val_autoencoders(args.experiment, args.dataset, args.data_root, args.ckpt_path, args.total_n_classes,
+                         args.batch_size, args.n_workers, args.pin_mem, dev)
     elif "CrossEntropy" in args.experiment or "Contrastive" in args.experiment:
         val_monolithic(args.experiment, args.dataset, args.data_root, args.ckpt_path, args.total_n_classes,
                        args.batch_size, args.n_workers, args.pin_mem, dev)
