@@ -2,7 +2,7 @@
 #SBATCH -t 24:00:00                  #  walltime hh:mm:ss
 #SBATCH -N 1                         #  one node
 #SBATCH -n 4                         #  CPU cores
-#SBATCH -x dgx001,dgx002,node[031,034,055,056,058,061,063,069,078,082,083,091,092]
+#SBATCH -x dgx001,dgx002,node[031,034,055,056,058,061,063,069,078,082,083,086,091,092,100-116]
 #SBATCH -o /om2/user/imason/compositions/slurm/slurm-%j.out    # file to send output to
 #SBATCH --array=0                    #
 #SBATCH --mem=20G                    #  RAM.
