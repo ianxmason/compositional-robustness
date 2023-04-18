@@ -19,8 +19,71 @@ from lib.networks import create_emnist_network, create_emnist_modules, create_em
 from lib.utils import *
 
 
-def loss_and_accuracy(network_blocks, dataloader, dev):
+def accumulate_activations(activations, labels, total_n_classes, class_cumsum, class_cumsum_sq, class_dpoints,
+                           max_activations, min_activations, raw_activations):
+    """
+    Takes activations of shape (batch_size, num_units) and labels of shape (batch_size,) and
+    accumulates them for later averaging.
+    """
+    if class_cumsum is None:
+        class_cumsum = torch.zeros(total_n_classes, activations.shape[1]).to(dev)
+    class_cumsum.index_add_(dim=0, index=labels, source=activations)
+
+    if class_cumsum_sq is None:
+        class_cumsum_sq = torch.zeros(total_n_classes, activations.shape[1]).to(dev)
+    class_cumsum_sq.index_add_(dim=0, index=labels, source=activations ** 2)
+
+    if class_dpoints is None:
+        class_dpoints = torch.zeros(total_n_classes).to(dev)
+    class_dpoints.index_add_(dim=0, index=labels, source=torch.ones(activations.shape[0]).to(dev))
+
+    batch_maxs, _ = torch.max(activations, dim=0)  # num_units
+    if max_activations is not None:
+        max_activations = torch.where(batch_maxs > max_activations, batch_maxs, max_activations)
+    else:
+        max_activations = batch_maxs
+
+    batch_mins, _ = torch.min(activations, dim=0)  # num_units
+    if min_activations is not None:
+        min_activations = torch.where(batch_mins < min_activations, batch_mins, min_activations)
+    else:
+        min_activations = batch_mins
+
+    if raw_activations is not None:
+        raw_activations = torch.cat((raw_activations, activations), dim=0)
+    else:
+        raw_activations = activations
+
+    return class_cumsum, class_cumsum_sq, class_dpoints, max_activations, min_activations, raw_activations
+
+
+def process_activations(class_cumsum, class_cumsum_sq, class_dpoints, min_activations):
+    """
+    Take activations and calculate average, max and std
+    """
+    # All activations should be after relu so activations are >= 0.
+    # If this is not true, need to return min_activations for later normalization of activations between 0 and 1
+    if not torch.min(min_activations) >= 0:
+        raise ValueError("Min activations are not >= 0")
+
+    class_avg_firings = class_cumsum / class_dpoints[:, None]
+
+    class_std_firings = torch.sqrt(class_cumsum_sq / class_dpoints[:, None] - class_avg_firings ** 2)
+
+    return class_avg_firings, class_std_firings
+
+
+def loss_and_accuracy(network_blocks, dataloader, dev, collect_activations=False, total_n_classes=None):
+    """
+    Calculates average loss and accuracy of a monolithic network on the given dataloader.
+
+    Optionally collects penultimate layer activations. total_n_classes is only required if this is True.
+    """
     assert len(network_blocks) >= 2  # assumed when the network is called
+    if collect_activations:
+        class_cumsum, class_cumsum_sq, class_dpoints = None, None, None
+        max_activations, min_activations, raw_activations = None, None, None
+        assert total_n_classes is not None
     criterion = nn.CrossEntropyLoss()
     for block in network_blocks:
         block.eval()
@@ -33,6 +96,10 @@ def loss_and_accuracy(network_blocks, dataloader, dev):
                 if j == 0:
                     features = block(x_tst)
                 elif j == len(network_blocks) - 1:
+                    if collect_activations:
+                        class_cumsum, class_cumsum_sq, class_dpoints, max_activations, min_activations, raw_activations\
+                            = accumulate_activations(features, y_tst, total_n_classes, class_cumsum, class_cumsum_sq,
+                                                     class_dpoints, max_activations, min_activations, raw_activations)
                     output = block(features)
                 else:
                     features = block(features)
@@ -41,11 +108,25 @@ def loss_and_accuracy(network_blocks, dataloader, dev):
             test_loss += loss.item()
             test_acc += acc
 
-    return test_loss / len(dataloader), test_acc / len(dataloader)
+    if not collect_activations:
+        return test_loss / len(dataloader), test_acc / len(dataloader)
+    else:
+        return test_loss / len(dataloader), test_acc / len(dataloader), \
+               class_cumsum, class_cumsum_sq, class_dpoints, max_activations, min_activations, raw_activations
 
 
-def modules_loss_and_accuracy(network_blocks, test_modules, test_module_levels, dataloader, dev):
+def modules_loss_and_accuracy(network_blocks, test_modules, test_module_levels, dataloader, dev,
+                              collect_activations=False, total_n_classes=None):
+    """
+    Calculates average loss and accuracy of a modular network on the given dataloader.
+
+    Optionally collects penultimate layer activations. total_n_classes is only required if this is True.
+    """
     assert len(network_blocks) >= 2  # assumed when the network is called
+    if collect_activations:
+        class_cumsum, class_cumsum_sq, class_dpoints = None, None, None
+        max_activations, min_activations, raw_activations = None, None, None
+        assert total_n_classes is not None
     criterion = nn.CrossEntropyLoss()
     for block in network_blocks:
         block.eval()
@@ -69,6 +150,10 @@ def modules_loss_and_accuracy(network_blocks, test_modules, test_module_levels, 
                 if j != len(network_blocks) - 1:
                     features = block(features)
                 else:
+                    if collect_activations:
+                        class_cumsum, class_cumsum_sq, class_dpoints, max_activations, min_activations, raw_activations\
+                            = accumulate_activations(features, y_tst, total_n_classes, class_cumsum, class_cumsum_sq,
+                                                     class_dpoints, max_activations, min_activations, raw_activations)
                     output = block(features)
 
             loss = criterion(output, y_tst)
@@ -76,11 +161,25 @@ def modules_loss_and_accuracy(network_blocks, test_modules, test_module_levels, 
             test_loss += loss.item()
             test_acc += acc
 
-    return test_loss / len(dataloader), test_acc / len(dataloader)
+    if not collect_activations:
+        return test_loss / len(dataloader), test_acc / len(dataloader)
+    else:
+        return test_loss / len(dataloader), test_acc / len(dataloader), \
+               class_cumsum, class_cumsum_sq, class_dpoints, max_activations, min_activations, raw_activations
 
 
-def autoencoders_loss_and_accuracy(all_ae_blocks, clsf_blocks, dataloader, dev):
+def autoencoders_loss_and_accuracy(all_ae_blocks, clsf_blocks, dataloader, dev, collect_activations=False,
+                                   total_n_classes=None):
+    """
+    Calculates average loss and accuracy of autoencoders followed by a classifying network on the given dataloader.
+
+    Optionally collects penultimate layer activations. total_n_classes is only required if this is True.
+    """
     assert len(clsf_blocks) >= 2  # assumed when the network is called
+    if collect_activations:
+        class_cumsum, class_cumsum_sq, class_dpoints = None, None, None
+        max_activations, min_activations, raw_activations = None, None, None
+        assert total_n_classes is not None
     criterion = nn.CrossEntropyLoss()
     for ae_blocks in all_ae_blocks:
         for block in ae_blocks:
@@ -119,6 +218,10 @@ def autoencoders_loss_and_accuracy(all_ae_blocks, clsf_blocks, dataloader, dev):
                 if j != len(clsf_blocks) - 1:
                     features = block(features)
                 else:
+                    if collect_activations:
+                        class_cumsum, class_cumsum_sq, class_dpoints, max_activations, min_activations, raw_activations\
+                            = accumulate_activations(features, y_tst, total_n_classes, class_cumsum, class_cumsum_sq,
+                                                     class_dpoints, max_activations, min_activations, raw_activations)
                     output = block(features)
 
             loss = criterion(output, y_tst)
@@ -126,11 +229,17 @@ def autoencoders_loss_and_accuracy(all_ae_blocks, clsf_blocks, dataloader, dev):
             test_loss += loss.item()
             test_acc += acc
 
-    return test_loss / len(dataloader), test_acc / len(dataloader), pre_ae_imgs, pre_ae_lbls, post_ae_imgs, post_ae_lbls
+    if not collect_activations:
+        return test_loss / len(dataloader), test_acc / len(dataloader), pre_ae_imgs, pre_ae_lbls, post_ae_imgs,\
+               post_ae_lbls
+    else:
+        return test_loss / len(dataloader), test_acc / len(dataloader), pre_ae_imgs, pre_ae_lbls, post_ae_imgs,\
+               post_ae_lbls, \
+               class_cumsum, class_cumsum_sq, class_dpoints, max_activations, min_activations, raw_activations
 
 
-def test_all(experiment, validate, dataset, data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers,
-             pin_mem, dev, check_if_run, total_processes, process):
+def test_monolithic(experiment, validate, dataset, data_root, ckpt_path, save_path, activations_path, total_n_classes,
+                    batch_size, collect_activations, n_workers, pin_mem, dev, check_if_run, total_processes, process):
     """
     Get the specific checkpoint trained on all corruptions and test on every composition
 
@@ -201,7 +310,14 @@ def test_all(experiment, validate, dataset, data_root, ckpt_path, save_path, tot
             _, _, tst_dl = get_transformed_static_dataloaders(dataset, identity_path, transforms, trained_classes,
                                                               batch_size, False, n_workers, pin_mem)
 
-        tst_loss, tst_acc = loss_and_accuracy(network_blocks, tst_dl, dev)
+        if not collect_activations:
+            tst_loss, tst_acc = loss_and_accuracy(network_blocks, tst_dl, dev)
+        else:
+            tst_loss, tst_acc, class_cumsum, class_cumsum_sq, class_dpoints, max_activations, min_activations,\
+            raw_activations = loss_and_accuracy(network_blocks, tst_dl, dev, collect_activations, total_n_classes)
+            class_avg_firings, class_std_firings = process_activations(class_cumsum, class_cumsum_sq, class_dpoints,
+                                                                       min_activations)
+
         corruption_accs['-'.join(test_corruption)] = tst_acc
         corruption_losses['-'.join(test_corruption)] = tst_loss
         print("{}, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment, '-'.join(test_corruption), tst_loss,
@@ -215,10 +331,18 @@ def test_all(experiment, validate, dataset, data_root, ckpt_path, save_path, tot
     with open(os.path.join(save_path, "{}_{}_all_losses_process_{}_of_{}.pkl".format(experiment, ckpt[:-3], process,
                                                                                      total_processes)), "wb") as f:
         pickle.dump(corruption_losses, f)
+    if collect_activations:
+        class_avg_firings = class_avg_firings.detach().cpu().numpy()
+        class_std_firings = class_std_firings.detach().cpu().numpy()
+        max_activations = max_activations.detach().cpu().numpy()
+        raw_activations = raw_activations.detach().cpu().numpy()
+        with open(os.path.join(activations_path, "{}_{}_all_activations_process_{}_of_{}.pkl".format(experiment,
+                               ckpt[:-3], process, total_processes)), "wb") as f:
+            pickle.dump((class_avg_firings, class_std_firings, max_activations, raw_activations), f)
 
 
-def test_modules(experiment, validate, dataset, data_root, ckpt_path, save_path, total_n_classes, batch_size, n_workers,
-                 pin_mem, dev, check_if_run, total_processes, process):
+def test_modules(experiment, validate, dataset, data_root, ckpt_path, save_path, activations_path, total_n_classes,
+                 batch_size, collect_activations, n_workers, pin_mem, dev, check_if_run, total_processes, process):
     """
     Get the specific checkpoint trained on all corruptions and test on every composition
 
@@ -346,7 +470,14 @@ def test_modules(experiment, validate, dataset, data_root, ckpt_path, save_path,
                 test_modules.append(modules[module_ckpts.index(test_ckpt)])
                 test_module_levels.append(module_levels[module_ckpts.index(test_ckpt)])
                 print("Selected module {}".format(test_ckpt))
-        tst_loss, tst_acc = modules_loss_and_accuracy(network_blocks, test_modules, test_module_levels, tst_dl, dev)
+        if not collect_activations:
+            tst_loss, tst_acc = modules_loss_and_accuracy(network_blocks, test_modules, test_module_levels, tst_dl, dev)
+        else:
+            tst_loss, tst_acc, class_cumsum, class_cumsum_sq, class_dpoints, max_activations, min_activations,\
+            raw_activations = modules_loss_and_accuracy(network_blocks, test_modules, test_module_levels, tst_dl, dev,
+                                                        collect_activations, total_n_classes)
+            class_avg_firings, class_std_firings = process_activations(class_cumsum, class_cumsum_sq, class_dpoints,
+                                                                       min_activations)
         corruption_accs['-'.join(test_corruption)] = tst_acc
         corruption_losses['-'.join(test_corruption)] = tst_loss
         print("{}, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment, '-'.join(test_corruption), tst_loss,
@@ -358,12 +489,21 @@ def test_modules(experiment, validate, dataset, data_root, ckpt_path, save_path,
                                                                                    total_processes)), "wb") as f:
         pickle.dump(corruption_accs, f)
     with open(os.path.join(save_path, "{}_all_losses_process_{}_of_{}.pkl".format(experiment, process,
-                                                                                     total_processes)), "wb") as f:
+                                                                                  total_processes)), "wb") as f:
         pickle.dump(corruption_losses, f)
+    if collect_activations:
+        class_avg_firings = class_avg_firings.detach().cpu().numpy()
+        class_std_firings = class_std_firings.detach().cpu().numpy()
+        max_activations = max_activations.detach().cpu().numpy()
+        raw_activations = raw_activations.detach().cpu().numpy()
+        with open(os.path.join(activations_path, "{}_all_activations_process_{}_of_{}.pkl".format(experiment,
+                               process, total_processes)), "wb") as f:
+            pickle.dump((class_avg_firings, class_std_firings, max_activations, raw_activations), f)
 
 
-def test_autoencoders(experiment, validate, dataset, data_root, ckpt_path, save_path, vis_path, total_n_classes,
-                      batch_size, n_workers, pin_mem, dev, check_if_run, total_processes, process):
+def test_autoencoders(experiment, validate, dataset, data_root, ckpt_path, save_path, activations_path, vis_path,
+                      total_n_classes, batch_size, collect_activations, n_workers, pin_mem, dev, check_if_run,
+                      total_processes, process):
     """
     Get the specific checkpoint trained on all corruptions and test on every composition
 
@@ -495,8 +635,16 @@ def test_autoencoders(experiment, validate, dataset, data_root, ckpt_path, save_
                         print("Selected autoencoder {}".format(block_ckpt_names))
                         test_ae_blocks.append(blocks)
 
-        tst_loss, tst_acc, pre_ae_imgs, pre_ae_lbls, post_ae_imgs, post_ae_lbls = \
-            autoencoders_loss_and_accuracy(test_ae_blocks, id_clsf_blocks, tst_dl, dev)
+        if not collect_activations:
+            tst_loss, tst_acc, pre_ae_imgs, pre_ae_lbls, post_ae_imgs, post_ae_lbls = \
+                autoencoders_loss_and_accuracy(test_ae_blocks, id_clsf_blocks, tst_dl, dev)
+        else:
+            tst_loss, tst_acc, pre_ae_imgs, pre_ae_lbls, post_ae_imgs, post_ae_lbls, class_cumsum, class_cumsum_sq, \
+            class_dpoints, id_max_activations, min_activations, id_raw_activations = \
+                autoencoders_loss_and_accuracy(test_ae_blocks, id_clsf_blocks, tst_dl, dev, collect_activations,
+                                               total_n_classes)
+            id_class_avg_firings, id_class_std_firings = process_activations(class_cumsum, class_cumsum_sq,
+                                                                             class_dpoints, min_activations)
         id_clsf_corruption_accs['-'.join(test_corruption)] = tst_acc
         id_clsf_corruption_losses['-'.join(test_corruption)] = tst_loss
         print("{} Identity Classifier, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment,
@@ -504,8 +652,15 @@ def test_autoencoders(experiment, validate, dataset, data_root, ckpt_path, save_
                                                                                        tst_loss, tst_acc))
         sys.stdout.flush()
 
-        tst_loss, tst_acc, _, _, _, _ = autoencoders_loss_and_accuracy(test_ae_blocks, all_clsf_blocks, tst_dl,
-                                                                                dev)
+        if not collect_activations:
+            tst_loss, tst_acc, _, _, _, _ = autoencoders_loss_and_accuracy(test_ae_blocks, all_clsf_blocks, tst_dl, dev)
+        else:
+            tst_loss, tst_acc, _, _, _, _, class_cumsum, class_cumsum_sq, class_dpoints, all_max_activations, \
+            min_activations, all_raw_activations = autoencoders_loss_and_accuracy(test_ae_blocks, all_clsf_blocks,
+                                                                                  tst_dl, dev, collect_activations,
+                                                                                  total_n_classes)
+            all_class_avg_firings, all_class_std_firings = process_activations(class_cumsum, class_cumsum_sq,
+                                                                               class_dpoints, min_activations)
         all_clsf_corruption_accs['-'.join(test_corruption)] = tst_acc
         all_clsf_corruption_losses['-'.join(test_corruption)] = tst_loss
         print("{} Joint Classifier, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment,
@@ -540,6 +695,22 @@ def test_autoencoders(experiment, validate, dataset, data_root, ckpt_path, save_
     with open(os.path.join(save_path, "{}_all_losses_process_{}_of_{}.pkl".format(experiment + "JointClassifier",
                                                                                   process, total_processes)), "wb") as f:
         pickle.dump(all_clsf_corruption_losses, f)
+    if collect_activations:
+        id_class_avg_firings = id_class_avg_firings.detach().cpu().numpy()
+        id_class_std_firings = id_class_std_firings.detach().cpu().numpy()
+        id_max_activations = id_max_activations.detach().cpu().numpy()
+        id_raw_activations = id_raw_activations.detach().cpu().numpy()
+        with open(os.path.join(activations_path, "{}_all_activations_process_{}_of_{}.pkl".format(
+                               experiment + "IdentityClassifier", process, total_processes)), "wb") as f:
+            pickle.dump((id_class_avg_firings, id_class_std_firings, id_max_activations, id_raw_activations), f)
+
+        all_class_avg_firings = all_class_avg_firings.detach().cpu().numpy()
+        all_class_std_firings = all_class_std_firings.detach().cpu().numpy()
+        all_max_activations = all_max_activations.detach().cpu().numpy()
+        all_raw_activations = all_raw_activations.detach().cpu().numpy()
+        with open(os.path.join(activations_path, "{}_all_activations_process_{}_of_{}.pkl".format(
+                                experiment + "JointClassifier", process, total_processes)), "wb") as f:
+            pickle.dump((all_class_avg_firings, all_class_std_firings, all_max_activations, all_raw_activations), f)
 
 
 if __name__ == "__main__":
@@ -551,6 +722,8 @@ if __name__ == "__main__":
                         help="path to directory to save checkpoints")
     parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/results/',
                         help="path to directory to save test accuracies and losses")
+    parser.add_argument('--activations-path', type=str, default='/om2/user/imason/compositions/activations/',
+                        help="path to directory to save neural activations")
     parser.add_argument('--vis-path', type=str, default='/om2/user/imason/compositions/figs/',
                         help="path to directory to save autoencoder visualisations")
     parser.add_argument('--experiment', type=str, default='CrossEntropy',
@@ -558,6 +731,7 @@ if __name__ == "__main__":
     parser.add_argument('--validate', action='store_true', help="If set, uses the validation rather than the test set")
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
     parser.add_argument('--batch-size', type=int, default=256, help="batch size")
+    parser.add_argument('--collect-activations', action='store_true', help="Collects penultimate layer activations")
     parser.add_argument('--n-workers', type=int, default=2, help="number of workers (PyTorch)")
     parser.add_argument('--pin-mem', action='store_true', help="set to turn pin memory on (PyTorch)")
     parser.add_argument('--cpu', action='store_true', help="set to train with the cpu (PyTorch) - untested")
@@ -583,12 +757,14 @@ if __name__ == "__main__":
         dev = torch.device('cuda')
 
     # Set up and create unmade directories
-    variance_dir_name = f"lr-0.1_weight-0.1"  # f"seed-{seed}"
+    variance_dir_name = f"lr-0.01_weight-1.0"  # f"seed-{seed}"
     args.data_root = os.path.join(args.data_root, args.dataset)
     args.ckpt_path = os.path.join(args.ckpt_path, args.dataset, variance_dir_name)
     args.save_path = os.path.join(args.save_path, args.dataset, variance_dir_name)
+    args.activations_path = os.path.join(args.activations_path, args.dataset, variance_dir_name)
     args.vis_path = os.path.join(args.vis_path, args.dataset, "autoencoder_visualisations", variance_dir_name)
     mkdir_p(args.save_path)
+    mkdir_p(args.activations_path)
     if "ImgSpace" in args.experiment:
         mkdir_p(args.vis_path)
 
@@ -597,13 +773,14 @@ if __name__ == "__main__":
 
     if "Modules" in args.experiment:
         test_modules(args.experiment, args.validate, args.dataset, args.data_root, args.ckpt_path, args.save_path,
-                     args.total_n_classes, args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run,
-                     args.num_processes, args.process)
+                     args.activations_path, args.total_n_classes, args.batch_size, args.collect_activations,
+                     args.n_workers, args.pin_mem, dev, args.check_if_run, args.num_processes, args.process)
     elif "ImgSpace" in args.experiment:
         test_autoencoders(args.experiment, args.validate, args.dataset, args.data_root, args.ckpt_path, args.save_path,
-                          args.vis_path, args.total_n_classes, args.batch_size, args.n_workers, args.pin_mem, dev,
-                          args.check_if_run, args.num_processes, args.process)
+                          args.activations_path, args.vis_path, args.total_n_classes, args.batch_size,
+                          args.collect_activations, args.n_workers, args.pin_mem, dev, args.check_if_run,
+                          args.num_processes, args.process)
     else:
-        test_all(args.experiment, args.validate, args.dataset, args.data_root, args.ckpt_path, args.save_path,
-                 args.total_n_classes, args.batch_size, args.n_workers, args.pin_mem, dev, args.check_if_run,
-                 args.num_processes, args.process)
+        test_monolithic(args.experiment, args.validate, args.dataset, args.data_root, args.ckpt_path, args.save_path,
+                        args.activations_path, args.total_n_classes, args.batch_size, args.collect_activations,
+                        args.n_workers, args.pin_mem, dev, args.check_if_run, args.num_processes, args.process)
