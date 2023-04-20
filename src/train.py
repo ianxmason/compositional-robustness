@@ -1128,7 +1128,7 @@ if __name__ == "__main__":
         raise ValueError("Dataset {} not implemented".format(args.dataset))
 
     # Set seeding
-    seed = 48121620
+    seed = 48121620  # Final: 13579111 24681012 36912151. Hparams: 48121620
     reset_rngs(seed=seed, deterministic=True)
 
     # Set device
