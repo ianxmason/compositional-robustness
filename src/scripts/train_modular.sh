@@ -36,6 +36,6 @@ module load openmind/singularity/3.5.0
 # Modules - Hardcoded Locations
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "FACESCRUB" --experiment "Modules" --total-n-classes 388 --max-epochs 200 --lr ?? --weight ?? --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
 # Modules - Automatic Locations
-#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "FACESCRUB" --experiment "AutoModules" --total-n-classes 388 --max-epochs 200 --lr ?? --weight ?? --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "FACESCRUB" --experiment "AutoModules" --total-n-classes 388 --max-epochs 200 --lr 1e-1 --weight 1e-1 --corruption-ID $SLURM_ARRAY_TASK_ID --check-if-run
 # ImgSpace - Train Autoencoders
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/xboix/singularity/xboix-tensorflow2.9.simg python train.py --dataset "FACESCRUB" --experiment "ImgSpace" --total-n-classes 388 --max-epochs 200 --lr 1e-1 --corruption-ID $SLURM_ARRAY_TASK_ID --n-workers 4 --check-if-run
