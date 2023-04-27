@@ -241,18 +241,27 @@ def train_classifiers(dataset, data_root, ckpt_path, logging_path, experiment, t
         all_parameters += list(block.parameters())
 
     # optim = torch.optim.Adam(all_parameters, lr)  # Todo: used for EMNIST, test without
+    initial_epoch = 0
     optim = torch.optim.SGD(all_parameters, lr, momentum=0.9, weight_decay=5e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=max_epochs)
 
     # Early Stopping Set Up
     es_ckpt_paths = [os.path.join(ckpt_path, "es_ckpt_{}".format(block_ckpt_name)) for block_ckpt_name in
                      network_block_ckpt_names]
-    early_stoppings = [EarlyStopping(patience=max_epochs, path=es_ckpt_path, trace_func=clsf_logger.info) for
-                       es_ckpt_path in es_ckpt_paths]
+    early_stoppings = [EarlyStopping(patience=max_epochs, path=es_ckpt_path, trace_func=clsf_logger.info,
+                                     save_full_state=True) for es_ckpt_path in es_ckpt_paths]
     early_stoppings[0].verbose = True
     assert len(early_stoppings) == len(network_blocks)
-    # val_freq = len(trn_dls[0]) // len(corruption_paths)
-    # clsf_logger.info("Validation frequency: every {} batches".format(val_freq))
+
+    # Check if training is partially completed by presence of early stopping checkpoints.
+    if os.path.exists(es_ckpt_paths[0]):
+        print("Early stopping checkpoint already exists at {} "
+              "\nResuming training from checkpoint".format(es_ckpt_paths[0]))
+        for es, block in zip(early_stoppings, network_blocks):
+            initial_epoch = es.load_from_checkpoint(block, optim, scheduler, dev)
+        initial_epoch += 1
+        print("Resuming training from epoch {}".format(initial_epoch))
+        print("Resuming training with learning rate {}".format(optim.param_groups[0]['lr']))
 
     # Loss Function Set Up
     cross_entropy_loss_fn = nn.CrossEntropyLoss()
@@ -276,7 +285,7 @@ def train_classifiers(dataset, data_root, ckpt_path, logging_path, experiment, t
             block.eval()
 
     # Training Loop
-    for epoch in range(max_epochs):
+    for epoch in range(initial_epoch, max_epochs):
         for block in network_blocks:
             block.train()
         epoch_loss = 0.0
@@ -333,20 +342,15 @@ def train_classifiers(dataset, data_root, ckpt_path, logging_path, experiment, t
 
         # Early Stopping
         for es, block in zip(early_stoppings, network_blocks):
-            es(valid_loss / len(val_dls[0]), block)  # ES on loss
+            es(valid_loss / len(val_dls[0]), block, optim, scheduler, epoch)  # ES on loss
         if early_stoppings[0].early_stop:
             clsf_logger.info("Early stopping")
             break
-        # for block in network_blocks:
-        #     block.train()
-        #
-        # if early_stoppings[0].early_stop:
-        #     break
 
     # Save model
     clsf_logger.info("Loading early stopped checkpoints")
     for es, block in zip(early_stoppings, network_blocks):
-        es.load_from_checkpoint(block)
+        es.load_from_checkpoint(block, optim, scheduler, dev)
     for block in network_blocks:
         block.eval()
     valid_loss = 0.0
@@ -1128,7 +1132,7 @@ if __name__ == "__main__":
         raise ValueError("Dataset {} not implemented".format(args.dataset))
 
     # Set seeding
-    seed = 48121620  # Final: 13579111 24681012 36912151. Hparams: 48121620
+    seed = 13579111  # Final: 13579111 24681012 36912151. Hparams: 48121620
     reset_rngs(seed=seed, deterministic=True)
 
     # Set device
@@ -1140,7 +1144,7 @@ if __name__ == "__main__":
         dev = torch.device('cuda')
 
     # Set up and create unmade directories
-    variance_dir_name = f"lr-{args.lr}_weight-{args.weight}"  # f"seed-{seed}"
+    variance_dir_name = f"seed-{seed}"  # f"lr-{args.lr}_weight-{args.weight}"
     args.data_root = os.path.join(args.data_root, args.dataset)
     args.ckpt_path = os.path.join(args.ckpt_path, args.dataset, variance_dir_name)
     args.logging_path = os.path.join(args.logging_path, args.dataset, variance_dir_name)
