@@ -37,4 +37,4 @@ module load openmind/singularity/3.5.0
 # Contrastive Loss
 #singularity exec --nv -B /om,/om2/user/$USER /om2/user/imason/singularity/imason-pytorch.simg python train.py --dataset "FACESCRUB" --experiment "Contrastive" --total-n-classes 388 --max-epochs 200 --lr 1e-1 --weight 1e-3 --corruption-ID $SLURM_ARRAY_TASK_ID --n-workers 4 --check-if-run
 # ImgSpace - Train Classifiers
-#singularity exec --nv -B /om,/om2/user/$USER /om2/user/imason/singularity/imason-pytorch.simg python train.py --dataset "FACESCRUB" --experiment "ImgSpace" --total-n-classes 388 --max-epochs 200 --lr ?? --corruption-ID $SLURM_ARRAY_TASK_ID --n-workers 4 --check-if-run
+#singularity exec --nv -B /om,/om2/user/$USER /om2/user/imason/singularity/imason-pytorch.simg python train.py --dataset "FACESCRUB" --experiment "ImgSpace" --total-n-classes 388 --max-epochs 200 --lr 1e-1 --corruption-ID $SLURM_ARRAY_TASK_ID --n-workers 4 --check-if-run
