@@ -67,8 +67,10 @@ def process_activations(class_cumsum, class_cumsum_sq, class_dpoints, min_activa
         raise ValueError("Min activations are not >= 0")
 
     class_avg_firings = class_cumsum / class_dpoints[:, None]
+    class_avg_firings[torch.isnan(class_avg_firings)] = 0  # if a class has no data points, set avg to 0
 
     class_std_firings = torch.sqrt(class_cumsum_sq / class_dpoints[:, None] - class_avg_firings ** 2)
+    class_std_firings[torch.isnan(class_std_firings)] = 1
 
     return class_avg_firings, class_std_firings
 
@@ -275,6 +277,7 @@ def test_monolithic(experiment, validate, dataset, data_root, ckpt_path, save_pa
     # Test the model trained on all corruptions on all compositions
     corruption_accs = {}
     corruption_losses = {}
+    corruption_activations = {}
 
     with open(os.path.join(args.data_root, "corruption_names.pkl"), "rb") as f:
         corruptions = pickle.load(f)
@@ -317,6 +320,10 @@ def test_monolithic(experiment, validate, dataset, data_root, ckpt_path, save_pa
             raw_activations = loss_and_accuracy(network_blocks, tst_dl, dev, collect_activations, total_n_classes)
             class_avg_firings, class_std_firings = process_activations(class_cumsum, class_cumsum_sq, class_dpoints,
                                                                        min_activations)
+            corruption_activations['-'.join(test_corruption)] = (class_avg_firings.detach().cpu().numpy(),
+                                                                 class_std_firings.detach().cpu().numpy(),
+                                                                 max_activations.detach().cpu().numpy(),
+                                                                 raw_activations.detach().cpu().numpy())
 
         corruption_accs['-'.join(test_corruption)] = tst_acc
         corruption_losses['-'.join(test_corruption)] = tst_loss
@@ -332,13 +339,9 @@ def test_monolithic(experiment, validate, dataset, data_root, ckpt_path, save_pa
                                                                                      total_processes)), "wb") as f:
         pickle.dump(corruption_losses, f)
     if collect_activations:
-        class_avg_firings = class_avg_firings.detach().cpu().numpy()
-        class_std_firings = class_std_firings.detach().cpu().numpy()
-        max_activations = max_activations.detach().cpu().numpy()
-        raw_activations = raw_activations.detach().cpu().numpy()
         with open(os.path.join(activations_path, "{}_{}_all_activations_process_{}_of_{}.pkl".format(experiment,
                                ckpt[:-3], process, total_processes)), "wb") as f:
-            pickle.dump((class_avg_firings, class_std_firings, max_activations, raw_activations), f)
+            pickle.dump(corruption_activations, f)
 
 
 def test_modules(experiment, validate, dataset, data_root, ckpt_path, save_path, activations_path, total_n_classes,
@@ -400,6 +403,7 @@ def test_modules(experiment, validate, dataset, data_root, ckpt_path, save_path,
     # Test the model on all compositions
     corruption_accs = {}
     corruption_losses = {}
+    corruption_activations = {}
 
     with open(os.path.join(args.data_root, "corruption_names.pkl"), "rb") as f:
         corruptions = pickle.load(f)
@@ -478,6 +482,10 @@ def test_modules(experiment, validate, dataset, data_root, ckpt_path, save_path,
                                                         collect_activations, total_n_classes)
             class_avg_firings, class_std_firings = process_activations(class_cumsum, class_cumsum_sq, class_dpoints,
                                                                        min_activations)
+            corruption_activations['-'.join(test_corruption)] = (class_avg_firings.detach().cpu().numpy(),
+                                                                 class_std_firings.detach().cpu().numpy(),
+                                                                 max_activations.detach().cpu().numpy(),
+                                                                 raw_activations.detach().cpu().numpy())
         corruption_accs['-'.join(test_corruption)] = tst_acc
         corruption_losses['-'.join(test_corruption)] = tst_loss
         print("{}, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment, '-'.join(test_corruption), tst_loss,
@@ -492,13 +500,9 @@ def test_modules(experiment, validate, dataset, data_root, ckpt_path, save_path,
                                                                                   total_processes)), "wb") as f:
         pickle.dump(corruption_losses, f)
     if collect_activations:
-        class_avg_firings = class_avg_firings.detach().cpu().numpy()
-        class_std_firings = class_std_firings.detach().cpu().numpy()
-        max_activations = max_activations.detach().cpu().numpy()
-        raw_activations = raw_activations.detach().cpu().numpy()
         with open(os.path.join(activations_path, "{}_all_activations_process_{}_of_{}.pkl".format(experiment,
                                process, total_processes)), "wb") as f:
-            pickle.dump((class_avg_firings, class_std_firings, max_activations, raw_activations), f)
+            pickle.dump(corruption_activations, f)
 
 
 def test_autoencoders(experiment, validate, dataset, data_root, ckpt_path, save_path, activations_path, vis_path,
@@ -588,8 +592,10 @@ def test_autoencoders(experiment, validate, dataset, data_root, ckpt_path, save_
     # Test the model on all compositions
     id_clsf_corruption_accs = {}
     id_clsf_corruption_losses = {}
+    id_corruption_activations = {}
     all_clsf_corruption_accs = {}
     all_clsf_corruption_losses = {}
+    all_corruption_activations = {}
 
     with open(os.path.join(args.data_root, "corruption_names.pkl"), "rb") as f:
         corruptions = pickle.load(f)
@@ -645,6 +651,10 @@ def test_autoencoders(experiment, validate, dataset, data_root, ckpt_path, save_
                                                total_n_classes)
             id_class_avg_firings, id_class_std_firings = process_activations(class_cumsum, class_cumsum_sq,
                                                                              class_dpoints, min_activations)
+            id_corruption_activations['-'.join(test_corruption)] = (id_class_avg_firings.detach().cpu().numpy(),
+                                                                    id_class_std_firings.detach().cpu().numpy(),
+                                                                    id_max_activations.detach().cpu().numpy(),
+                                                                    id_raw_activations.detach().cpu().numpy())
         id_clsf_corruption_accs['-'.join(test_corruption)] = tst_acc
         id_clsf_corruption_losses['-'.join(test_corruption)] = tst_loss
         print("{} Identity Classifier, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment,
@@ -661,6 +671,10 @@ def test_autoencoders(experiment, validate, dataset, data_root, ckpt_path, save_
                                                                                   total_n_classes)
             all_class_avg_firings, all_class_std_firings = process_activations(class_cumsum, class_cumsum_sq,
                                                                                class_dpoints, min_activations)
+            all_corruption_activations['-'.join(test_corruption)] = (all_class_avg_firings.detach().cpu().numpy(),
+                                                                     all_class_std_firings.detach().cpu().numpy(),
+                                                                     all_max_activations.detach().cpu().numpy(),
+                                                                     all_raw_activations.detach().cpu().numpy())
         all_clsf_corruption_accs['-'.join(test_corruption)] = tst_acc
         all_clsf_corruption_losses['-'.join(test_corruption)] = tst_loss
         print("{} Joint Classifier, {}. test loss: {:.4f}, test acc: {:.4f}".format(experiment,
@@ -696,21 +710,12 @@ def test_autoencoders(experiment, validate, dataset, data_root, ckpt_path, save_
                                                                                   process, total_processes)), "wb") as f:
         pickle.dump(all_clsf_corruption_losses, f)
     if collect_activations:
-        id_class_avg_firings = id_class_avg_firings.detach().cpu().numpy()
-        id_class_std_firings = id_class_std_firings.detach().cpu().numpy()
-        id_max_activations = id_max_activations.detach().cpu().numpy()
-        id_raw_activations = id_raw_activations.detach().cpu().numpy()
         with open(os.path.join(activations_path, "{}_all_activations_process_{}_of_{}.pkl".format(
                                experiment + "IdentityClassifier", process, total_processes)), "wb") as f:
-            pickle.dump((id_class_avg_firings, id_class_std_firings, id_max_activations, id_raw_activations), f)
-
-        all_class_avg_firings = all_class_avg_firings.detach().cpu().numpy()
-        all_class_std_firings = all_class_std_firings.detach().cpu().numpy()
-        all_max_activations = all_max_activations.detach().cpu().numpy()
-        all_raw_activations = all_raw_activations.detach().cpu().numpy()
+            pickle.dump(id_corruption_activations, f)
         with open(os.path.join(activations_path, "{}_all_activations_process_{}_of_{}.pkl".format(
                                 experiment + "JointClassifier", process, total_processes)), "wb") as f:
-            pickle.dump((all_class_avg_firings, all_class_std_firings, all_max_activations, all_raw_activations), f)
+            pickle.dump(all_corruption_activations, f)
 
 
 if __name__ == "__main__":
@@ -745,7 +750,7 @@ if __name__ == "__main__":
         raise ValueError("Dataset {} not implemented".format(args.dataset))
 
     # Set seeding
-    seed = 48121620
+    seed = 13579111  # Final: 13579111 24681012 36912151. Hparams: 48121620
     reset_rngs(seed=seed, deterministic=True)
 
     # Set device
@@ -757,7 +762,7 @@ if __name__ == "__main__":
         dev = torch.device('cuda')
 
     # Set up and create unmade directories
-    variance_dir_name = f"lr-0.01_weight-1.0"  # f"seed-{seed}"
+    variance_dir_name = f"seed-{seed}"  # f"lr-0.01_weight-1.0"
     args.data_root = os.path.join(args.data_root, args.dataset)
     args.ckpt_path = os.path.join(args.ckpt_path, args.dataset, variance_dir_name)
     args.save_path = os.path.join(args.save_path, args.dataset, variance_dir_name)

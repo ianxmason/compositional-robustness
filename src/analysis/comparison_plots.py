@@ -201,62 +201,21 @@ if __name__ == "__main__":
                         help="path to directory to save analysis plots and pickle files")
     args = parser.parse_args()
 
+    # Set seeding
+    seed = 13579111  # Final: 13579111 24681012 36912151. Hparams: 48121620
+    reset_rngs(seed=seed, deterministic=True)
+
+    variance_dir_name = f"seed-{seed}"  # f"lr-0.01_weight-1.0"
     args.data_root = os.path.join(args.data_root, args.dataset)
-    args.results_path = os.path.join(args.results_path, args.dataset)
-    args.save_path = os.path.join(args.save_path, args.dataset)
+    args.results_path = os.path.join(args.results_path, args.dataset, variance_dir_name)
+    args.save_path = os.path.join(args.save_path, args.dataset, variance_dir_name)
+    mkdir_p(args.save_path)
 
     # Most common experiments
     experiments = ["CrossEntropy",
                    "Contrastive",
-                   "Modules", "AutoModules",
-                   "ImgSpaceIdentityClassifier"] # , "ImgSpaceJointClassifier"]
-
-    # experiments = ["CrossEntropy", "Contrastive", "Modules"]
-
-    # experiments = ["CrossEntropyV2",
-    #                "ContrastiveV2", "AutoContrastiveV2", "ModLevelContrastiveV2",
-    #                "ModulesV2", "AutoModulesV2"]
-
-    # experiments = ["ModLevelContrastiveV3",
-    #                "ContrastiveL3W01", "ContrastiveL3W1", "ContrastiveL3W10",
-    #                "ContrastiveL4W01", "ContrastiveL4W1", "ContrastiveL4W10",
-    #                "ContrastiveL5W01", "ContrastiveL5W1", "ContrastiveL5W10"]
-
-    # experiments = ["ModulesV3", "ModulesV3NoPassThrough", "ModulesV3NoInvariance",
-    #                "AutoModulesV3", "AutoModulesV3NoPassThrough", "AutoModulesV3NoInvariance"]
-
-    """
-    WARNING - these are 'best case'/cherry picked experiments. Not actually the true/final results.
-    Summarising above 3 experiments. This shows:
-    - With hparam tuning contrastive is similar/better than cross entropy (without hparam tuning)
-    - Different levels of contrastive seem a lot worse
-    - Modules are better than contrastive when applied at right level
-    - Pass through seems to be neither good nor bad
-    - Invariance loss in modules is essential
-    - Automodules are best as they find better level for the modules
-    - Variance across automodules experiments is high(ish) due to finding different levels of abstraction
-    """
-    # experiments = ["CrossEntropyV2",
-    #                "ContrastiveL5W01", "ModLevelContrastiveV3",
-    #                "ModulesV2", "ModulesV3", "ModulesV3NoPassThrough", "ModulesV3NoInvariance",
-    #                "AutoModulesV2", "AutoModulesV3"]
-
-    # With img space
-    # experiments = ["CrossEntropyV2",
-    #                "ContrastiveL5W01",
-    #                "ModulesV2", "AutoModulesV2",
-    #                "ImgSpaceV2IdentityClassifier", "ImgSpaceV2JointClassifier"]
-
-    # Highlighting only the best modules
-    # experiments = ["CrossEntropyV2",
-    #                "ContrastiveL5W01",
-    #                "AutoModulesV2"]
-
-    # Set seeding
-    reset_rngs(seed=369121518, deterministic=True)
-
-    # Create unmade directories
-    mkdir_p(args.save_path)
+                   "AutoModules"]  # "Modules",
+                   # "ImgSpaceIdentityClassifier", "ImgSpaceJointClassifier"]
 
     with open(os.path.join(args.data_root, "corruption_names.pkl"), "rb") as f:
         all_corruptions = pickle.load(f)
@@ -268,9 +227,5 @@ if __name__ == "__main__":
             if corr not in elemental_corruptions:
                 elemental_corruptions.append(corr[0])
 
-    """
-    Run from inside analysis directory as: python comparison_plots.py
-    If use shell script put cd analysis in shell script
-    """
-
+    # Run from inside analysis directory as: python comparison_plots.py
     main(elemental_corruptions, experiments, args.dataset, args.results_path, args.save_path)

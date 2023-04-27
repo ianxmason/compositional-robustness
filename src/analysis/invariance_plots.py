@@ -1,0 +1,288 @@
+# Plot histogram, heatmap, box plots comparing CrossEntropy, Contrastive, Modules etc.
+import argparse
+import os
+import sys
+import pickle
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.stats import linregress
+sys.path.append("../")
+from lib.utils import *
+import data.data_transforms as dt
+from analysis.plotting import *
+
+
+# Build dataframe
+    # activations, accuracies etc
+    # normalise 0 - 1
+# Get dataframe (from saved if it takes a long time to build)
+
+# From pairs of corrs, calc invariances
+    # E.g. ID, GB, R90 - pairwise inv, worst case
+    # ID, GB, R90 vs GB-R90, worst case
+
+# Expectation
+    # More invariance gets better accuracy. Elementals get good acc. So composition similar to elementals also good acc.
+
+# Also plot elemental invariance vs accuracy. Show it is saturated. Even though we get good acc and good invariance
+# we cannot push things further with elementals
+
+def main(all_corruptions, experiments, dataset, total_n_classes, results_path, activations_path, save_path, pairs_only):
+
+    if dataset == "EMNIST" or dataset == "CIFAR":
+        num_neurons = 512
+    elif dataset == "FACESCRUB":
+        num_neurons = 2048
+    else:
+        raise ValueError("Dataset not implemented")
+
+    elemental_corruptions = []
+    composition_corruptions = []
+    # Training on only the corruptions in the composition. Always include identity, remove permutations
+    for corr in all_corruptions:
+        if len(corr) == 1:
+            if corr not in elemental_corruptions:
+                elemental_corruptions.append(corr[0])
+        else:
+            if corr not in composition_corruptions:
+                composition_corruptions.append(corr)
+    assert len(elemental_corruptions) == 7  # Includes Identity
+    assert len(composition_corruptions) == 160
+
+    elemental_corruptions = [getattr(dt, c)() for c in elemental_corruptions]
+    all_results_files = os.listdir(os.path.join(results_path))
+    for i, experiment in enumerate(experiments):
+        all_accs = {}
+        results_files = [f for f in all_results_files if f.split("_")[0] == experiment]
+
+        for results_file in sorted(results_files, key=lambda x: (x.count('-'), x.lower())):
+            if "process" in results_file:
+                with open(os.path.join(results_path, results_file), "rb") as f:
+                    results = pickle.load(f)
+                    if "_losses" in results_file:
+                        continue
+                    elif "_accs" in results_file:
+                        name = results_file.split("_")[1]
+                        for k, v in results.items():
+                            for corruption in elemental_corruptions:
+                                k = k.replace(corruption.name, corruption.abbreviation)
+                            if k in all_accs:
+                                raise RuntimeError("Duplicate key {} in {}".format(k, results_file))
+                            else:
+                                all_accs[k] = v
+                    else:
+                        raise RuntimeError("Invalid file {} in {}".format(results_file, results_path))
+            if "process" not in results_file:
+                continue
+
+        assert len(all_accs) == 167  # hardcoded for EMNIST.
+
+        if i == 0:
+            accs_df = pd.DataFrame(data=all_accs, index=[experiment])
+        else:
+            accs_df = accs_df.append(pd.DataFrame(data=all_accs, index=[experiment]))
+
+    print(accs_df)
+    print(len(accs_df))
+
+    fig, axs = plt.subplots(1, 3, figsize=(16, 6))
+    plot_colors = ["blue", "orange", "green", "red", "purple", "brown", "pink", "gray", "olive", "cyan"]
+    min_elemental_median = 100
+    min_composition_median = 100
+    all_activations_files = os.listdir(os.path.join(activations_path))
+    for i, experiment in enumerate(experiments):
+        df_cols = ["Neuron Idx", "Corruption"]
+        df_cols += ["Class {}".format(i) for i in range(total_n_classes)]
+        activations_df = pd.DataFrame(columns=df_cols)
+        activations_files = [f for f in all_activations_files if f.split("_")[0] == experiment]
+
+        # First process maxes to get the max activations for each neuron over all corruptions
+        # If using this normalisation this asks that neurons fire in exactly the same way over corruptions
+        # If instead we normalise each corruption with its own max activation this asks that neurons fire in the same
+        # relative way over corruptions, (not necessarily with the same magnitude)
+        max_activations = np.zeros(num_neurons)
+        for activations_file in sorted(activations_files, key=lambda x: (x.count('-'), x.lower())):
+            if "process" in activations_file:
+                with open(os.path.join(activations_path, activations_file), "rb") as f:
+                    activations = pickle.load(f)
+                    for k, v in activations.items():
+                        _, _, corr_max_activations, _ = v
+                        # Shapes: _, _, (num_units), _
+                        assert corr_max_activations.shape == (num_neurons,)
+                        max_activations = np.maximum(max_activations, corr_max_activations)
+
+        for activations_file in sorted(activations_files, key=lambda x: (x.count('-'), x.lower())):
+            if "process" in activations_file:
+                with open(os.path.join(activations_path, activations_file), "rb") as f:
+                    activations = pickle.load(f)
+                    for k, v in activations.items():
+                        for corruption in elemental_corruptions:
+                            k = k.replace(corruption.name, corruption.abbreviation)
+
+                        class_avg_firings, class_std_firings, _, raw_activations = v
+                        # Shapes: (num_classes, num_units), (num_classes, num_units), _, (num_dpoints, num_units)
+                        assert class_avg_firings.shape == (total_n_classes, num_neurons)
+
+                        activations_dict = {k: [] for k in df_cols}
+                        for neuron_idx, class_firings in enumerate(class_avg_firings.T):
+                            activations_dict["Neuron Idx"].append(neuron_idx)
+                            activations_dict["Corruption"].append(k)
+                            for class_idx, firings in enumerate(class_firings):
+                                if max_activations[neuron_idx] == 0:
+                                    activations_dict["Class {}".format(class_idx)].append(0)
+                                else:
+                                    activations_dict["Class {}".format(class_idx)].append(firings /
+                                                                                          max_activations[neuron_idx])
+                        activations_df = pd.concat([activations_df, pd.DataFrame(data=activations_dict)])
+            if "process" not in activations_file:
+                continue
+        assert len(activations_df) == 167 * num_neurons
+        print(activations_df)
+        print(len(activations_df))
+
+        median_elemental_invariance_scores = {}
+        median_composition_invariance_scores = {}
+        for composition_corruption in composition_corruptions:
+            composition_corruption = [getattr(dt, c)().abbreviation for c in composition_corruption]
+            print(composition_corruption)
+            if pairs_only and len(composition_corruption) != 2:
+                continue
+
+            elemental_df = activations_df[activations_df["Corruption"].isin(composition_corruption +
+                                                                            [getattr(dt, "Identity")().abbreviation])]
+            composition_df = activations_df[activations_df["Corruption"] == "-".join(composition_corruption)]
+            composition_df = pd.concat([elemental_df, composition_df])
+            assert len(composition_df) == num_neurons * (len(composition_corruption) + 2)
+
+            elemental_invariance_scores = []
+            composition_invariance_scores = []
+            for neuron_idx in range(num_neurons):
+                elemental_neuron_df = elemental_df[elemental_df["Neuron Idx"] == neuron_idx]
+                composition_neuron_df = composition_df[composition_df["Neuron Idx"] == neuron_idx]
+                elemental_neuron_df = elemental_neuron_df.drop(columns=["Neuron Idx", "Corruption"])
+                composition_neuron_df = composition_neuron_df.drop(columns=["Neuron Idx", "Corruption"])
+
+                # Preferred category is the category which maximally activates over all relevant corruptions
+                elemental_pref_cat = elemental_neuron_df.sum(axis=0).idxmax()
+                composition_pref_cat = composition_neuron_df.sum(axis=0).idxmax()
+
+                # Difference between max and min firing rate for preferred category is worst case invariance score
+                elemental_invariance_score = 1 - (elemental_neuron_df[elemental_pref_cat].max()
+                                                  - elemental_neuron_df[elemental_pref_cat].min())
+
+                # Firing rate has decreased for the composition, so invariance change is when it increases to max
+                composition_drop_invariance_score = (elemental_neuron_df[elemental_pref_cat].max()
+                                                     - composition_neuron_df.iloc[-1][composition_pref_cat])
+                # Firing rate has increased for the composition, so invariance change is when it drops to the min
+                composition_incr_invariance_score = (composition_neuron_df.iloc[-1][composition_pref_cat]
+                                                     - elemental_neuron_df[elemental_pref_cat].min())
+
+                composition_invariance_score = 1 - max(abs(composition_incr_invariance_score),
+                                                       abs(composition_drop_invariance_score))
+
+                assert elemental_invariance_score >= 0
+                assert composition_invariance_score >= 0
+                elemental_invariance_scores.append(elemental_invariance_score)
+                composition_invariance_scores.append(composition_invariance_score)
+
+            median_elemental_invariance_scores["-".join(composition_corruption)] = np.median(elemental_invariance_scores)
+            median_composition_invariance_scores["-".join(composition_corruption)] = np.median(composition_invariance_scores)
+
+        print(median_elemental_invariance_scores)
+        print(median_composition_invariance_scores)
+        min_elemental_median = min(min_elemental_median, min(median_elemental_invariance_scores.values()))
+        min_composition_median = min(min_composition_median, min(median_composition_invariance_scores.values()))
+        x_range = np.arange(0, 1.05, 0.05)
+        # Plotting
+        elem_scores, comp_scores, accs = [], [], []
+        for k in median_elemental_invariance_scores.keys():
+            elem_scores.append(median_elemental_invariance_scores[k])
+            comp_scores.append(median_composition_invariance_scores[k])
+            accs.append(accs_df.loc[experiment, k])
+
+        slope, intercept, r_value, p_value, std_err = linregress(elem_scores, comp_scores)
+        axs[0].scatter(elem_scores, comp_scores, c=plot_colors[i])
+        axs[0].plot(x_range, slope * x_range + intercept, c=plot_colors[i],
+                    label='{}\nr={:.2f}\np={:.2f}'.format(experiment, r_value, p_value))
+
+        slope, intercept, r_value, p_value, std_err = linregress(elem_scores, accs)
+        axs[1].scatter(elem_scores, accs, c=plot_colors[i])
+        axs[1].plot(x_range, slope * x_range + intercept, c=plot_colors[i],
+                    label='{}\nr={:.2f}\np={:.2f}'.format(experiment, r_value, p_value))
+
+        slope, intercept, r_value, p_value, std_err = linregress(comp_scores, accs)
+        axs[2].scatter(comp_scores, accs, c=plot_colors[i])
+        axs[2].plot(x_range, slope * x_range + intercept, c=plot_colors[i],
+                    label='{}\nr={:.2f}\np={:.2f}'.format(experiment, r_value, p_value))
+
+    min_acc = 0
+    max_acc = 100
+    min_elemental_median = np.floor(min_elemental_median * 10) / 10  # Round down to 1 decimal place
+    min_composition_median = np.floor(min_composition_median * 10) / 10
+    min_joint_median = min(min_elemental_median, min_composition_median)
+    max_median = 1
+    axs[0].set_xlabel("Elemental Invariance Score")
+    axs[0].set_ylabel("Composition Invariance Score")
+    axs[0].set_xlim(min_joint_median, max_median)
+    axs[0].set_ylim(min_joint_median, max_median)
+    axs[0].set_aspect('equal')
+    axs[0].legend(loc='upper left')
+    axs[1].set_xlabel("Elemental Invariance Score")
+    axs[1].set_ylabel("Accuracy")
+    axs[1].set_xlim(min_joint_median, max_median)
+    axs[1].set_ylim(min_acc, max_acc)
+    axs[1].legend(loc='upper left')
+    axs[2].set_xlabel("Composition Invariance Score")
+    axs[2].set_ylabel("Accuracy")
+    axs[2].set_xlim(min_joint_median, max_median)
+    axs[2].set_ylim(min_acc, max_acc)
+    axs[2].legend(loc='upper left')
+    if pairs_only:
+        plt.savefig(os.path.join(save_path, "invariance-plots-pairs-only.pdf"), bbox_inches="tight")
+    else:
+        plt.savefig(os.path.join(save_path, "invariance-plots-all-compositions.pdf"), bbox_inches="tight")
+    print("Saved invariance plots to {}".format(os.path.join(save_path, "invariance-plots.pdf")))
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Args to test networks on all corruptions in a given directory.')
+    parser.add_argument('--dataset', type=str, default='EMNIST', help="which dataset to use")
+    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/',
+                        help="path to directory containing directories of different corruptions")
+    parser.add_argument('--results-path', type=str, default='/om2/user/imason/compositions/results/',
+                        help="path to directory containing results of testing")
+    parser.add_argument('--activations-path', type=str, default='/om2/user/imason/compositions/activations/',
+                        help="path to directory to save neural activations")
+    parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/analysis/',
+                        help="path to directory to save analysis plots and pickle files")
+    parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
+    parser.add_argument('--pairs-only', action='store_true', help="Plots only the compositions with 2 corruptions")
+    args = parser.parse_args()
+
+    # Set seeding
+    seed = 13579111  # Final: 13579111 24681012 36912151. Hparams: 48121620
+    reset_rngs(seed=seed, deterministic=True)
+
+    variance_dir_name = f"seed-{seed}"  # f"lr-0.01_weight-1.0"
+    args.data_root = os.path.join(args.data_root, args.dataset)
+    args.results_path = os.path.join(args.results_path, args.dataset, variance_dir_name)
+    args.activations_path = os.path.join(args.activations_path, args.dataset, variance_dir_name)
+    args.save_path = os.path.join(args.save_path, args.dataset, variance_dir_name)
+    mkdir_p(args.save_path)
+
+    # Most common experiments
+    experiments = ["CrossEntropy",
+                   "Contrastive",
+                   "AutoModules"]  # "Modules",
+                   # "ImgSpaceIdentityClassifier", "ImgSpaceJointClassifier"]
+
+    with open(os.path.join(args.data_root, "corruption_names.pkl"), "rb") as f:
+        all_corruptions = pickle.load(f)
+
+    """
+    Run from inside analysis directory as: python invariance_plots.py --total-n-classes 47
+    """
+
+    main(all_corruptions, experiments, args.dataset, args.total_n_classes, args.results_path,
+         args.activations_path, args.save_path, args.pairs_only)
