@@ -38,6 +38,7 @@ do
                              --dataset "EMNIST" \
                              --total-n-classes 47 \
                              --experiment "CrossEntropy" \
+                             --seed 36912151 \
                              --collect-activations \
                              --num-processes $(($SLURM_ARRAY_TASK_COUNT * $jobs_per_gpu)) \
                              --process $(($SLURM_ARRAY_TASK_ID * $jobs_per_gpu + $number)) &

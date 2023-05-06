@@ -1116,6 +1116,7 @@ if __name__ == "__main__":
     parser.add_argument('--max-epochs', type=int, default=200, help="max number of training epochs")
     parser.add_argument('--batch-size', type=int, default=256, help="batch size")
     parser.add_argument('--lr', type=float, default=1e-3, help="learning rate")
+    parser.add_argument('--seed', type=int, default=36912151, help="random seed")
     parser.add_argument('--n-workers', type=int, default=2, help="number of workers (PyTorch)")
     parser.add_argument('--pin-mem', action='store_true', help="set to turn pin memory on (PyTorch)")
     parser.add_argument('--cpu', action='store_true', help="set to train with the cpu (PyTorch) - untested")
@@ -1131,9 +1132,8 @@ if __name__ == "__main__":
     if args.dataset not in ["EMNIST", "CIFAR", "FACESCRUB"]:
         raise ValueError("Dataset {} not implemented".format(args.dataset))
 
-    # Set seeding
-    seed = 13579111  # Final: 13579111 24681012 36912151. Hparams: 48121620
-    reset_rngs(seed=seed, deterministic=True)
+    # Set seeding # Final: 13579111 24681012 36912151. Hparams: 48121620
+    reset_rngs(seed=args.seed, deterministic=True)
 
     # Set device
     if args.cpu:
@@ -1144,7 +1144,7 @@ if __name__ == "__main__":
         dev = torch.device('cuda')
 
     # Set up and create unmade directories
-    variance_dir_name = f"seed-{seed}"  # f"lr-{args.lr}_weight-{args.weight}"
+    variance_dir_name = f"seed-{args.seed}"  # f"lr-{args.lr}_weight-{args.weight}"
     args.data_root = os.path.join(args.data_root, args.dataset)
     args.ckpt_path = os.path.join(args.ckpt_path, args.dataset, variance_dir_name)
     args.logging_path = os.path.join(args.logging_path, args.dataset, variance_dir_name)

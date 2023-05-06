@@ -733,6 +733,7 @@ if __name__ == "__main__":
                         help="path to directory to save autoencoder visualisations")
     parser.add_argument('--experiment', type=str, default='CrossEntropy',
                         help="which method to use. CrossEntropy or Contrastive or Modules.")
+    parser.add_argument('--seed', type=int, default=36912151, help="random seed")
     parser.add_argument('--validate', action='store_true', help="If set, uses the validation rather than the test set")
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
     parser.add_argument('--batch-size', type=int, default=256, help="batch size")
@@ -749,9 +750,8 @@ if __name__ == "__main__":
     if args.dataset not in ["EMNIST", "CIFAR", "FACESCRUB"]:
         raise ValueError("Dataset {} not implemented".format(args.dataset))
 
-    # Set seeding
-    seed = 13579111  # Final: 13579111 24681012 36912151. Hparams: 48121620
-    reset_rngs(seed=seed, deterministic=True)
+    # Set seeding # Final: 13579111 24681012 36912151. Hparams: 48121620
+    reset_rngs(seed=args.seed, deterministic=True)
 
     # Set device
     if args.cpu:
@@ -762,7 +762,7 @@ if __name__ == "__main__":
         dev = torch.device('cuda')
 
     # Set up and create unmade directories
-    variance_dir_name = f"seed-{seed}"  # f"lr-0.01_weight-1.0"
+    variance_dir_name = f"seed-{args.seed}"  # f"lr-0.01_weight-1.0"
     args.data_root = os.path.join(args.data_root, args.dataset)
     args.ckpt_path = os.path.join(args.ckpt_path, args.dataset, variance_dir_name)
     args.save_path = os.path.join(args.save_path, args.dataset, variance_dir_name)
