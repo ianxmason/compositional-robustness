@@ -13,22 +13,8 @@ import data.data_transforms as dt
 from analysis.plotting import *
 
 
-# Build dataframe
-    # activations, accuracies etc
-    # normalise 0 - 1
-# Get dataframe (from saved if it takes a long time to build)
-
-# From pairs of corrs, calc invariances
-    # E.g. ID, GB, R90 - pairwise inv, worst case
-    # ID, GB, R90 vs GB-R90, worst case
-
-# Expectation
-    # More invariance gets better accuracy. Elementals get good acc. So composition similar to elementals also good acc.
-
-# Also plot elemental invariance vs accuracy. Show it is saturated. Even though we get good acc and good invariance
-# we cannot push things further with elementals
-
-def main(all_corruptions, experiments, dataset, total_n_classes, results_path, activations_path, save_path, pairs_only):
+def main(all_corruptions, experiments, legend_names, dataset, total_n_classes, results_path, activations_path,
+         save_path, pairs_only):
 
     if dataset == "EMNIST" or dataset == "CIFAR":
         num_neurons = 512
@@ -158,14 +144,29 @@ def main(all_corruptions, experiments, dataset, total_n_classes, results_path, a
             elemental_invariance_scores = []
             composition_invariance_scores = []
             for neuron_idx in range(num_neurons):
+                if max_activations[neuron_idx] <= 1e-6:
+                    print("Skipped dead neuron with idx {}".format(neuron_idx))
+                    continue
                 elemental_neuron_df = elemental_df[elemental_df["Neuron Idx"] == neuron_idx]
                 composition_neuron_df = composition_df[composition_df["Neuron Idx"] == neuron_idx]
                 elemental_neuron_df = elemental_neuron_df.drop(columns=["Neuron Idx", "Corruption"])
                 composition_neuron_df = composition_neuron_df.drop(columns=["Neuron Idx", "Corruption"])
 
+                # Normalize the activations grid following Madan et al. B.1 https://arxiv.org/pdf/2007.08032.pdf
+                #  "The activations grid is then normalized to be between 0 and 1. To do so, we subtract the minimum of
+                #  the activations grid and then divide it by the maximum."
+                elem_max = elemental_neuron_df.max().max()
+                elem_min = elemental_neuron_df.min().min()
+                elemental_neuron_df = (elemental_neuron_df - elem_min) / (elem_max - elem_min)
+                comp_max = composition_neuron_df.max().max()
+                comp_min = composition_neuron_df.min().min()
+                composition_neuron_df = (composition_neuron_df - comp_min) / (comp_max - comp_min)
+
                 # Preferred category is the category which maximally activates over all relevant corruptions
+                # We want to use the same prefrred category for elemental and composition.
+                # I.e. if an "F"  detection neuron for elementals, we want to know how it fires for "F" on compositions.
                 elemental_pref_cat = elemental_neuron_df.sum(axis=0).idxmax()
-                composition_pref_cat = composition_neuron_df.sum(axis=0).idxmax()
+                # composition_pref_cat = composition_neuron_df.sum(axis=0).idxmax()
 
                 # Difference between max and min firing rate for preferred category is worst case invariance score
                 elemental_invariance_score = 1 - (elemental_neuron_df[elemental_pref_cat].max()
@@ -173,18 +174,42 @@ def main(all_corruptions, experiments, dataset, total_n_classes, results_path, a
 
                 # Firing rate has decreased for the composition, so invariance change is when it increases to max
                 composition_drop_invariance_score = (elemental_neuron_df[elemental_pref_cat].max()
-                                                     - composition_neuron_df.iloc[-1][composition_pref_cat])
+                                                     - composition_neuron_df.iloc[-1][elemental_pref_cat])
                 # Firing rate has increased for the composition, so invariance change is when it drops to the min
-                composition_incr_invariance_score = (composition_neuron_df.iloc[-1][composition_pref_cat]
+                composition_incr_invariance_score = (composition_neuron_df.iloc[-1][elemental_pref_cat]
                                                      - elemental_neuron_df[elemental_pref_cat].min())
 
                 composition_invariance_score = 1 - max(abs(composition_incr_invariance_score),
                                                        abs(composition_drop_invariance_score))
 
+                # print(composition_neuron_df)
+                # print(max_activations[neuron_idx])
+                # print(elemental_invariance_score)
+                # print(composition_invariance_score)
+                # print(elem_max, elem_min, comp_max, comp_min)
+                # print("++++++++++++++++++++++++++++++++")
+                # print(elemental_invariance_score, composition_invariance_score)
+
+
+                # Without preferred category
+                # elemental_invariance_score = 1 - ((elemental_neuron_df.max() - elemental_neuron_df.min()).mean())
+                #
+                # composition_invariance_diff = (elemental_neuron_df.max() - composition_neuron_df.iloc[-1]).abs()
+                # composition_invariance_diff = pd.concat([composition_invariance_diff,
+                #                                          (composition_neuron_df.iloc[-1] - elemental_neuron_df.min()).abs()],
+                #                                         axis=1)
+                # composition_invariance_score = 1 - composition_invariance_diff.max(axis=1).mean()
+                # print(composition_neuron_df)
+                # print(composition_invariance_diff)
+                # print(composition_invariance_diff.max(axis=1))
+
                 assert elemental_invariance_score >= 0
                 assert composition_invariance_score >= 0
                 elemental_invariance_scores.append(elemental_invariance_score)
                 composition_invariance_scores.append(composition_invariance_score)
+
+            print(len(elemental_invariance_scores))
+            print(len(composition_invariance_scores))
 
             median_elemental_invariance_scores["-".join(composition_corruption)] = np.median(elemental_invariance_scores)
             median_composition_invariance_scores["-".join(composition_corruption)] = np.median(composition_invariance_scores)
@@ -204,17 +229,17 @@ def main(all_corruptions, experiments, dataset, total_n_classes, results_path, a
         slope, intercept, r_value, p_value, std_err = linregress(elem_scores, comp_scores)
         axs[0].scatter(elem_scores, comp_scores, c=plot_colors[i])
         axs[0].plot(x_range, slope * x_range + intercept, c=plot_colors[i],
-                    label='{}\nr={:.2f}\np={:.2f}'.format(experiment, r_value, p_value))
+                    label='{}\nr={:.2f}\np={:.2f}'.format(legend_names[i], r_value, p_value))
 
         slope, intercept, r_value, p_value, std_err = linregress(elem_scores, accs)
         axs[1].scatter(elem_scores, accs, c=plot_colors[i])
         axs[1].plot(x_range, slope * x_range + intercept, c=plot_colors[i],
-                    label='{}\nr={:.2f}\np={:.2f}'.format(experiment, r_value, p_value))
+                    label='{}\nr={:.2f}\np={:.2f}'.format(legend_names[i], r_value, p_value))
 
         slope, intercept, r_value, p_value, std_err = linregress(comp_scores, accs)
         axs[2].scatter(comp_scores, accs, c=plot_colors[i])
         axs[2].plot(x_range, slope * x_range + intercept, c=plot_colors[i],
-                    label='{}\nr={:.2f}\np={:.2f}'.format(experiment, r_value, p_value))
+                    label='{}\nr={:.2f}\np={:.2f}'.format(legend_names[i], r_value, p_value))
 
     min_acc = 0
     max_acc = 100
@@ -240,9 +265,10 @@ def main(all_corruptions, experiments, dataset, total_n_classes, results_path, a
     axs[2].legend(loc='upper left')
     if pairs_only:
         plt.savefig(os.path.join(save_path, "invariance-plots-pairs-only.pdf"), bbox_inches="tight")
+        print("Saved invariance plots to {}".format(os.path.join(save_path, "invariance-plots-pairs-only.pdf")))
     else:
         plt.savefig(os.path.join(save_path, "invariance-plots-all-compositions.pdf"), bbox_inches="tight")
-    print("Saved invariance plots to {}".format(os.path.join(save_path, "invariance-plots.pdf")))
+        print("Saved invariance plots to {}".format(os.path.join(save_path, "invariance-plots-all-compositions.pdf")))
 
 
 if __name__ == "__main__":
@@ -257,14 +283,14 @@ if __name__ == "__main__":
     parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/analysis/',
                         help="path to directory to save analysis plots and pickle files")
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
+    parser.add_argument('--seed', type=int, default=36912151, help="random seed")
     parser.add_argument('--pairs-only', action='store_true', help="Plots only the compositions with 2 corruptions")
     args = parser.parse_args()
 
-    # Set seeding
-    seed = 13579111  # Final: 13579111 24681012 36912151. Hparams: 48121620
-    reset_rngs(seed=seed, deterministic=True)
+    # Set seeding # Final: 13579111 24681012 36912151. Hparams: 48121620
+    reset_rngs(seed=args.seed, deterministic=True)
 
-    variance_dir_name = f"seed-{seed}"  # f"lr-0.01_weight-1.0"
+    variance_dir_name = f"seed-{args.seed}"  # f"lr-0.01_weight-1.0"
     args.data_root = os.path.join(args.data_root, args.dataset)
     args.results_path = os.path.join(args.results_path, args.dataset, variance_dir_name)
     args.activations_path = os.path.join(args.activations_path, args.dataset, variance_dir_name)
@@ -277,12 +303,14 @@ if __name__ == "__main__":
                    "AutoModules"]  # "Modules",
                    # "ImgSpaceIdentityClassifier", "ImgSpaceJointClassifier"]
 
+    legend_names = ["ERM", "Contrastive", "Modular"] #  "AE-Modular-ID", "AE-Modular-Joint"]
+
     with open(os.path.join(args.data_root, "corruption_names.pkl"), "rb") as f:
         all_corruptions = pickle.load(f)
 
     """
-    Run from inside analysis directory as: python invariance_plots.py --total-n-classes 47
+    Run from inside analysis directory as: python invariance_plots.py --dataset EMNIST --total-n-classes 47 --pairs-only
     """
 
-    main(all_corruptions, experiments, args.dataset, args.total_n_classes, args.results_path,
+    main(all_corruptions, experiments, legend_names, args.dataset, args.total_n_classes, args.results_path,
          args.activations_path, args.save_path, args.pairs_only)

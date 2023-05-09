@@ -15,7 +15,7 @@ import data.data_transforms as dt
 from analysis.plotting import *
 
 
-def main(elemental_corruptions, experiments, dataset, results_path, save_path):
+def main(elemental_corruptions, experiments, legend_names, dataset, results_path, save_path):
 
     if dataset == "EMNIST":
         chance = 100./47.
@@ -66,11 +66,11 @@ def main(elemental_corruptions, experiments, dataset, results_path, save_path):
         assert len(all_accs) == 167  # hardcoded for EMNIST. EMNIST4 149. EMNIST5 167.
 
         if i == 0:
-            losses_df = pd.DataFrame(data=all_losses, index=[experiment])
-            accs_df = pd.DataFrame(data=all_accs, index=[experiment])
+            losses_df = pd.DataFrame(data=all_losses, index=[legend_names[i]])
+            accs_df = pd.DataFrame(data=all_accs, index=[legend_names[i]])
         else:
-            losses_df = losses_df.append(pd.DataFrame(data=all_losses, index=[experiment]))
-            accs_df = accs_df.append(pd.DataFrame(data=all_accs, index=[experiment]))
+            losses_df = losses_df.append(pd.DataFrame(data=all_losses, index=[legend_names[i]]))
+            accs_df = accs_df.append(pd.DataFrame(data=all_accs, index=[legend_names[i]]))
 
     # print(accs_df)
     # print(losses_df)
@@ -134,7 +134,7 @@ def main(elemental_corruptions, experiments, dataset, results_path, save_path):
     comp_counts = {}
     for i in range(1, 7):
         comp_counts[i] = []
-        for exp in experiments:
+        for exp in legend_names:
             comp_counts[i].append(
                 len(plot_df.loc[(plot_df['Num Elementals'] == i) & (plot_df['Experiment'] == exp)]))
 
@@ -199,13 +199,13 @@ if __name__ == "__main__":
                         help="path to directory containing results of testing")
     parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/analysis/',
                         help="path to directory to save analysis plots and pickle files")
+    parser.add_argument('--seed', type=int, default=36912151, help="random seed")
     args = parser.parse_args()
 
-    # Set seeding
-    seed = 13579111  # Final: 13579111 24681012 36912151. Hparams: 48121620
-    reset_rngs(seed=seed, deterministic=True)
+    # Set seeding # Final: 13579111 24681012 36912151. Hparams: 48121620
+    reset_rngs(seed=args.seed, deterministic=True)
 
-    variance_dir_name = f"seed-{seed}"  # f"lr-0.01_weight-1.0"
+    variance_dir_name = f"seed-{args.seed}"  # f"lr-0.01_weight-1.0"
     args.data_root = os.path.join(args.data_root, args.dataset)
     args.results_path = os.path.join(args.results_path, args.dataset, variance_dir_name)
     args.save_path = os.path.join(args.save_path, args.dataset, variance_dir_name)
@@ -216,6 +216,8 @@ if __name__ == "__main__":
                    "Contrastive",
                    "AutoModules"]  # "Modules",
                    # "ImgSpaceIdentityClassifier", "ImgSpaceJointClassifier"]
+
+    legend_names = ["ERM", "Contrastive", "Modular"] #  "AE-Modular-ID", "AE-Modular-Joint"]
 
     with open(os.path.join(args.data_root, "corruption_names.pkl"), "rb") as f:
         all_corruptions = pickle.load(f)
@@ -228,4 +230,4 @@ if __name__ == "__main__":
                 elemental_corruptions.append(corr[0])
 
     # Run from inside analysis directory as: python comparison_plots.py
-    main(elemental_corruptions, experiments, args.dataset, args.results_path, args.save_path)
+    main(elemental_corruptions, experiments, legend_names, args.dataset, args.results_path, args.save_path)
