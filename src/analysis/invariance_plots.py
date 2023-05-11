@@ -173,14 +173,18 @@ def main(all_corruptions, experiments, legend_names, dataset, total_n_classes, r
                                                   - elemental_neuron_df[elemental_pref_cat].min())
 
                 # Firing rate has decreased for the composition, so invariance change is when it increases to max
-                composition_drop_invariance_score = (elemental_neuron_df[elemental_pref_cat].max()
-                                                     - composition_neuron_df.iloc[-1][elemental_pref_cat])
-                # Firing rate has increased for the composition, so invariance change is when it drops to the min
-                composition_incr_invariance_score = (composition_neuron_df.iloc[-1][elemental_pref_cat]
-                                                     - elemental_neuron_df[elemental_pref_cat].min())
+                # composition_drop_invariance_score = (elemental_neuron_df[elemental_pref_cat].max()
+                #                                      - composition_neuron_df.iloc[-1][elemental_pref_cat])
+                # # Firing rate has increased for the composition, so invariance change is when it drops to the min
+                # composition_incr_invariance_score = (composition_neuron_df.iloc[-1][elemental_pref_cat]
+                #                                      - elemental_neuron_df[elemental_pref_cat].min())
+                #
+                # composition_invariance_score = 1 - max(abs(composition_incr_invariance_score),
+                #                                        abs(composition_drop_invariance_score))
 
-                composition_invariance_score = 1 - max(abs(composition_incr_invariance_score),
-                                                       abs(composition_drop_invariance_score))
+                # max() is worst case invariance. min() is best case invariance - i.e. want to be close to one elemental
+                composition_invariance_score = 1 - (elemental_neuron_df[elemental_pref_cat] -
+                                                    composition_neuron_df.iloc[-1][elemental_pref_cat]).abs().min()
 
                 # print(composition_neuron_df)
                 # print(max_activations[neuron_idx])
