@@ -97,19 +97,21 @@ def main(elemental_corruptions, experiments, legend_names, dataset, results_path
     print(len(accs_df))
 
     # Heatmap
+    sns.set_theme()
+    sns.set_context("notebook")
     fig, axs = plt.subplots(1, 2, figsize=(60, 40))
 
     title = "Accuracy Heatmap"
     sns.heatmap(accs_df.transpose(), annot=True, ax=axs[0])
     axs[0].set_title(title)
-    axs[0].set_xlabel("Training Corruption(s) - Single Shifts")
-    axs[0].set_ylabel("Test Corruption(s)- Compositions")
+    axs[0].set_xlabel("Training Approach")
+    axs[0].set_ylabel("Test Corruption(s)")
 
     title = "Loss Heatmap"
     sns.heatmap(losses_df.transpose(), annot=True, ax=axs[1])
     axs[1].set_title(title)
-    axs[1].set_xlabel("Training Corruption(s) - Single Shifts")
-    axs[1].set_ylabel("Test Corruption(s) - Compositions")
+    axs[1].set_xlabel("Training Approach")
+    axs[1].set_ylabel("Test Corruption(s)")
 
     plt.savefig(os.path.join(save_path, "comparison-heatmap.pdf"), bbox_inches="tight")
     print("Saved heatmap to {}".format(os.path.join(save_path, "comparison-heatmap.pdf")))
@@ -138,55 +140,53 @@ def main(elemental_corruptions, experiments, legend_names, dataset, results_path
             comp_counts[i].append(
                 len(plot_df.loc[(plot_df['Num Elementals'] == i) & (plot_df['Experiment'] == exp)]))
 
+    sns.set_theme()
+    sns.set_context("poster")
     fig, axs = plt.subplots(1, 1, figsize=(8, 8))
     sns.boxplot(x="Num Elementals", y="Composition Accuracy", hue="Experiment", data=plot_df, ax=axs)
     axs.axhline(y=chance, color='k', linestyle='--')
-    axs.text(0., chance, "Chance", verticalalignment='bottom', horizontalalignment='center', size='medium', color='k',
+    axs.text(0.1, chance + 0.1, "Chance", verticalalignment='bottom', horizontalalignment='center', size='small', color='k',
              weight='semibold')
     axs.axhline(y=ceiling, color='k', linestyle='--')
-    axs.text(5., ceiling, "Ceiling", verticalalignment='bottom', horizontalalignment='center', size='medium', color='k',
+    axs.text(4.9, ceiling - 0.7, "Ceiling", verticalalignment='top', horizontalalignment='center', size='small', color='k',
              weight='semibold')
-    axs.set_title("Composition accuracy with seen elementals")
+    # axs.set_title("Composition accuracy with seen elementals")
     axs.set_ylim(0, 100)
+    axs.set_xlabel("Corruptions in Composition")
+    axs.set_ylabel("Accuracy (%)")
     axs.legend(loc='center right')
-    plt.xticks(rotation=90)
+    # plt.xticks(rotation=90)
     # Add a count for how many points are in each box
-    for i, counts in comp_counts.items():
-        # 2 experiments
-        # axs.text(i - 1 - 0.2, 95, counts[0], c='b', horizontalalignment='center')
-        # axs.text(i - 1 + 0.2, 95, counts[1], c='orange', horizontalalignment='center')
-
-        # 3 experiments
-        axs.text(i - 1 - 0.3, 95, counts[0], c='b', horizontalalignment='center')
-        axs.text(i - 1 + 0.0, 95, counts[1], c='orange', horizontalalignment='center')
-        axs.text(i - 1 + 0.3, 95, counts[2], c='g', horizontalalignment='center')
+    # for i, counts in comp_counts.items():
+    #     # 3 experiments
+    #     axs.text(i - 1 - 0.3, 95, counts[0], c='b', horizontalalignment='center')
+    #     axs.text(i - 1 + 0.0, 95, counts[1], c='orange', horizontalalignment='center')
+    #     axs.text(i - 1 + 0.3, 95, counts[2], c='g', horizontalalignment='center')
 
     plt.savefig(os.path.join(save_path, "comparison-boxplot.pdf"), bbox_inches="tight")
     print("Saved boxplot to {}".format(os.path.join(save_path, "comparison-boxplot.pdf")))
 
 
     # Violinplot
-    fig, axs = plt.subplots(1, 1, figsize=(8, 8))
-    sns.violinplot(x="Num Elementals", y="Composition Accuracy", hue="Experiment", data=plot_df, ax=axs)
-    axs.axhline(y=chance, color='k', linestyle='--')
-    axs.axhline(y=ceiling, color='k', linestyle='--')
-    axs.set_title("Composition accuracy with seen elementals")
-    axs.set_ylim(0, 100)
-    axs.legend(loc='center right')
-    plt.xticks(rotation=90)
-    # Add a count for how many points are in each box
-    for i, counts in comp_counts.items():
-        # 2 experiments
-        # axs.text(i - 1 - 0.2, 95, counts[0], c='b', horizontalalignment='center')
-        # axs.text(i - 1 + 0.2, 95, counts[1], c='orange', horizontalalignment='center')
-
-        # 3 experiments
-        axs.text(i - 1 - 0.3, 95, counts[0], c='b', horizontalalignment='center')
-        axs.text(i - 1 + 0.0, 95, counts[1], c='orange', horizontalalignment='center')
-        axs.text(i - 1 + 0.3, 95, counts[2], c='g', horizontalalignment='center')
-
-    plt.savefig(os.path.join(save_path, "comparison-violins.pdf"), bbox_inches="tight")
-    print("Saved violinplot to {}".format(os.path.join(save_path, "comparison-violins.pdf")))
+    # sns.set_theme()
+    # sns.set_context("poster")
+    # fig, axs = plt.subplots(1, 1, figsize=(8, 8))
+    # sns.violinplot(x="Num Elementals", y="Composition Accuracy", hue="Experiment", data=plot_df, ax=axs)
+    # axs.axhline(y=chance, color='k', linestyle='--')
+    # axs.axhline(y=ceiling, color='k', linestyle='--')
+    # axs.set_title("Composition accuracy with seen elementals")
+    # axs.set_ylim(0, 100)
+    # axs.legend(loc='center right')
+    # plt.xticks(rotation=90)
+    # # Add a count for how many points are in each box
+    # # for i, counts in comp_counts.items():
+    # #     # 3 experiments
+    # #     axs.text(i - 1 - 0.3, 95, counts[0], c='b', horizontalalignment='center')
+    # #     axs.text(i - 1 + 0.0, 95, counts[1], c='orange', horizontalalignment='center')
+    # #     axs.text(i - 1 + 0.3, 95, counts[2], c='g', horizontalalignment='center')
+    #
+    # plt.savefig(os.path.join(save_path, "comparison-violins.pdf"), bbox_inches="tight")
+    # print("Saved violinplot to {}".format(os.path.join(save_path, "comparison-violins.pdf")))
 
 
 
