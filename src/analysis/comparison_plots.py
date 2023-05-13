@@ -199,7 +199,7 @@ if __name__ == "__main__":
                         help="path to directory containing results of testing")
     parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/analysis/',
                         help="path to directory to save analysis plots and pickle files")
-    parser.add_argument('--seed', type=int, default=36912151, help="random seed")
+    parser.add_argument('--seed', type=int, default=38164641, help="random seed")
     args = parser.parse_args()
 
     # Set seeding # Final: 13579111 24681012 36912151. Hparams: 48121620

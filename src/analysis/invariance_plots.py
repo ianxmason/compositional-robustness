@@ -287,7 +287,7 @@ if __name__ == "__main__":
     parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/analysis/',
                         help="path to directory to save analysis plots and pickle files")
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
-    parser.add_argument('--seed', type=int, default=36912151, help="random seed")
+    parser.add_argument('--seed', type=int, default=38164641, help="random seed")
     parser.add_argument('--pairs-only', action='store_true', help="Plots only the compositions with 2 corruptions")
     args = parser.parse_args()
 

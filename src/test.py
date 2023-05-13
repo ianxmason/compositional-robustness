@@ -733,7 +733,7 @@ if __name__ == "__main__":
                         help="path to directory to save autoencoder visualisations")
     parser.add_argument('--experiment', type=str, default='CrossEntropy',
                         help="which method to use. CrossEntropy or Contrastive or Modules.")
-    parser.add_argument('--seed', type=int, default=36912151, help="random seed")
+    parser.add_argument('--seed', type=int, default=38164641, help="random seed")
     parser.add_argument('--validate', action='store_true', help="If set, uses the validation rather than the test set")
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")
     parser.add_argument('--batch-size', type=int, default=256, help="batch size")

@@ -1116,7 +1116,7 @@ if __name__ == "__main__":
     parser.add_argument('--max-epochs', type=int, default=200, help="max number of training epochs")
     parser.add_argument('--batch-size', type=int, default=256, help="batch size")
     parser.add_argument('--lr', type=float, default=1e-3, help="learning rate")
-    parser.add_argument('--seed', type=int, default=36912151, help="random seed")
+    parser.add_argument('--seed', type=int, default=38164641, help="random seed")
     parser.add_argument('--n-workers', type=int, default=2, help="number of workers (PyTorch)")
     parser.add_argument('--pin-mem', action='store_true', help="set to turn pin memory on (PyTorch)")
     parser.add_argument('--cpu', action='store_true', help="set to train with the cpu (PyTorch) - untested")
