@@ -72,11 +72,7 @@ def main(elemental_corruptions, experiments, legend_names, dataset, results_path
             losses_df = losses_df.append(pd.DataFrame(data=all_losses, index=[legend_names[i]]))
             accs_df = accs_df.append(pd.DataFrame(data=all_accs, index=[legend_names[i]]))
 
-    # print(accs_df)
-    # print(losses_df)
-    # print(len(accs_df))
-
-    # Column reordeing shows an easier to read heatmap
+    # Column re-ordering shows an easier to read heatmap
     ordered_columns = list(accs_df.columns)
     ordered_columns.sort(key=lambda x: (x.count('-'), x.lower()))
     reordered_cols = []
@@ -113,9 +109,8 @@ def main(elemental_corruptions, experiments, legend_names, dataset, results_path
     axs[1].set_xlabel("Training Approach")
     axs[1].set_ylabel("Test Corruption(s)")
 
-    plt.savefig(os.path.join(save_path, "comparison-heatmap.pdf"), bbox_inches="tight")
-    print("Saved heatmap to {}".format(os.path.join(save_path, "comparison-heatmap.pdf")))
-
+    plt.savefig(os.path.join(save_path, f"comparison-heatmap-{dataset}.pdf"), bbox_inches="tight")
+    print("Saved heatmap to {}".format(os.path.join(save_path, f"comparison-heatmap-{dataset}.pdf")))
 
     # Boxplot
     col_names = ["Num Elementals", "Composition Accuracy", "Experiment"]
@@ -123,7 +118,6 @@ def main(elemental_corruptions, experiments, legend_names, dataset, results_path
     df_dict = {k: [] for k in col_names}
 
     for index in accs_df.index:
-        # comp_cols = [sorted(x.split('-')) for x in accs_df.columns]
         for comp in accs_df.columns:
             df_dict["Num Elementals"].append(len(comp.split('-')))
             df_dict["Composition Accuracy"].append(accs_df.loc[index][comp])
@@ -150,12 +144,13 @@ def main(elemental_corruptions, experiments, legend_names, dataset, results_path
     axs.axhline(y=ceiling, color='k', linestyle='--')
     axs.text(4.9, ceiling - 0.7, "Ceiling", verticalalignment='top', horizontalalignment='center', size='small', color='k',
              weight='semibold')
-    # axs.set_title("Composition accuracy with seen elementals")
     axs.set_ylim(0, 100)
     axs.set_xlabel("Corruptions in Composition")
     axs.set_ylabel("Accuracy (%)")
-    axs.legend(loc='center right')
-    # plt.xticks(rotation=90)
+    if dataset == "FACESCRUB":  # For the paper we only want the legend on the FACESCRUB plot
+        axs.legend(loc='center right')
+    else:
+        axs.get_legend().remove()
     # Add a count for how many points are in each box
     # for i, counts in comp_counts.items():
     #     # 3 experiments
@@ -163,31 +158,8 @@ def main(elemental_corruptions, experiments, legend_names, dataset, results_path
     #     axs.text(i - 1 + 0.0, 95, counts[1], c='orange', horizontalalignment='center')
     #     axs.text(i - 1 + 0.3, 95, counts[2], c='g', horizontalalignment='center')
 
-    plt.savefig(os.path.join(save_path, "comparison-boxplot.pdf"), bbox_inches="tight")
-    print("Saved boxplot to {}".format(os.path.join(save_path, "comparison-boxplot.pdf")))
-
-
-    # Violinplot
-    # sns.set_theme()
-    # sns.set_context("poster")
-    # fig, axs = plt.subplots(1, 1, figsize=(8, 8))
-    # sns.violinplot(x="Num Elementals", y="Composition Accuracy", hue="Experiment", data=plot_df, ax=axs)
-    # axs.axhline(y=chance, color='k', linestyle='--')
-    # axs.axhline(y=ceiling, color='k', linestyle='--')
-    # axs.set_title("Composition accuracy with seen elementals")
-    # axs.set_ylim(0, 100)
-    # axs.legend(loc='center right')
-    # plt.xticks(rotation=90)
-    # # Add a count for how many points are in each box
-    # # for i, counts in comp_counts.items():
-    # #     # 3 experiments
-    # #     axs.text(i - 1 - 0.3, 95, counts[0], c='b', horizontalalignment='center')
-    # #     axs.text(i - 1 + 0.0, 95, counts[1], c='orange', horizontalalignment='center')
-    # #     axs.text(i - 1 + 0.3, 95, counts[2], c='g', horizontalalignment='center')
-    #
-    # plt.savefig(os.path.join(save_path, "comparison-violins.pdf"), bbox_inches="tight")
-    # print("Saved violinplot to {}".format(os.path.join(save_path, "comparison-violins.pdf")))
-
+    plt.savefig(os.path.join(save_path, f"comparison-boxplot-{dataset}.pdf"), bbox_inches="tight")
+    print("Saved boxplot to {}".format(os.path.join(save_path, f"comparison-boxplot-{dataset}.pdf")))
 
 
 if __name__ == "__main__":

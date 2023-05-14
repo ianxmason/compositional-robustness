@@ -6,11 +6,66 @@ import pickle
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 from scipy.stats import linregress
 sys.path.append("../")
 from lib.utils import *
 import data.data_transforms as dt
 from analysis.plotting import *
+
+PLOT_COLORS = sns.color_palette()
+
+# Todo: Refactor the three annotate functions into one
+def annotate_elem_comp(data, **kws):
+    plot_elem_scores = data["Elemental Invariance Score"]
+    plot_comp_scores = data["Composition Invariance Score"]
+    plot_experiment = data["Experiment"].iloc[0]
+    slope, intercept, r_value, p_value, std_err = linregress(plot_elem_scores, plot_comp_scores)
+    ax = plt.gca()
+    for l_idx, l_name in enumerate(legend_names):
+        if l_idx == 0:
+            ax.text(0.5, -0.1, "Elemental Invariance Score", c='k', fontsize='medium', horizontalalignment='center',
+                    transform=ax.transAxes)
+        if l_name == plot_experiment:
+            ax.text(0.5, -0.15 - l_idx * 0.05, f"\u2022 {plot_experiment}. r = {r_value:.2f}. p = {p_value:.2f}.",
+                    c=PLOT_COLORS[l_idx], fontsize='medium', horizontalalignment='center', transform=ax.transAxes)
+            # x_range = np.arange(0, 1.05, 0.05)
+            # ax.plot(x_range, slope * x_range + intercept, c=PLOT_COLORS[l_idx], linestyle="--")
+
+
+def annotate_elem_acc(data, **kws):
+    plot_elem_scores = data["Elemental Invariance Score"]
+    plot_accs = data["Accuracy (%)"]
+    plot_experiment = data["Experiment"].iloc[0]
+    slope, intercept, r_value, p_value, std_err = linregress(plot_elem_scores, plot_accs)
+    ax = plt.gca()
+    for l_idx, l_name in enumerate(legend_names):
+        if l_idx == 0:
+            ax.text(0.5, -0.1, "Elemental Invariance Score", c='k', fontsize='medium', horizontalalignment='center',
+                    transform=ax.transAxes)
+        if l_name == plot_experiment:
+            ax.text(0.5, -0.15 - l_idx * 0.05, f"\u2022 {plot_experiment}. r = {r_value:.2f}. p = {p_value:.2f}.",
+                    c=PLOT_COLORS[l_idx], fontsize='medium', horizontalalignment='center', transform=ax.transAxes)
+            # x_range = np.arange(0, 1.05, 0.05)
+            # ax.plot(x_range, slope * x_range + intercept, c=PLOT_COLORS[l_idx], linestyle="--")
+
+
+def annotate_comp_acc(data, **kws):
+    plot_comp_scores = data["Composition Invariance Score"]
+    plot_accs = data["Accuracy (%)"]
+    plot_experiment = data["Experiment"].iloc[0]
+    slope, intercept, r_value, p_value, std_err = linregress(plot_comp_scores, plot_accs)
+    ax = plt.gca()
+    for l_idx, l_name in enumerate(legend_names):
+        if l_idx == 0:
+            ax.text(0.5, -0.1, "Composition Invariance Score", c='k', fontsize='medium', horizontalalignment='center',
+                    transform=ax.transAxes)
+        if l_name == plot_experiment:
+            ax.text(0.5, -0.15 - l_idx * 0.05, f"\u2022 {plot_experiment}. r = {r_value:.2f}. p = {p_value:.2f}.",
+                    c=PLOT_COLORS[l_idx], fontsize='medium', horizontalalignment='center', transform=ax.transAxes)
+            # x_range = np.arange(0, 1.05, 0.05)
+            # ax.plot(x_range, slope * x_range + intercept, c=PLOT_COLORS[l_idx], linestyle="--")
+
 
 
 def main(all_corruptions, experiments, legend_names, dataset, total_n_classes, results_path, activations_path,
@@ -72,11 +127,11 @@ def main(all_corruptions, experiments, legend_names, dataset, total_n_classes, r
     print(accs_df)
     print(len(accs_df))
 
-    fig, axs = plt.subplots(1, 3, figsize=(16, 6))
-    plot_colors = ["blue", "orange", "green", "red", "purple", "brown", "pink", "gray", "olive", "cyan"]
     min_elemental_median = 100
     min_composition_median = 100
     all_activations_files = os.listdir(os.path.join(activations_path))
+    scores_dict = {"Experiment": [], "Elemental Invariance Score": [], "Composition Invariance Score": [],
+                   "Accuracy (%)": [], "Corruptions in Composition": []}
     for i, experiment in enumerate(experiments):
         df_cols = ["Neuron Idx", "Corruption"]
         df_cols += ["Class {}".format(i) for i in range(total_n_classes)]
@@ -222,57 +277,64 @@ def main(all_corruptions, experiments, legend_names, dataset, total_n_classes, r
         print(median_composition_invariance_scores)
         min_elemental_median = min(min_elemental_median, min(median_elemental_invariance_scores.values()))
         min_composition_median = min(min_composition_median, min(median_composition_invariance_scores.values()))
-        x_range = np.arange(0, 1.05, 0.05)
-        # Plotting
-        elem_scores, comp_scores, accs = [], [], []
         for k in median_elemental_invariance_scores.keys():
-            elem_scores.append(median_elemental_invariance_scores[k])
-            comp_scores.append(median_composition_invariance_scores[k])
-            accs.append(accs_df.loc[experiment, k])
+            scores_dict["Experiment"].append(legend_names[i])
+            scores_dict["Elemental Invariance Score"].append(median_elemental_invariance_scores[k])
+            scores_dict["Composition Invariance Score"].append(median_composition_invariance_scores[k])
+            scores_dict["Accuracy (%)"].append(accs_df.loc[experiment, k])
+            scores_dict["Corruptions in Composition"].append(len(k.split("-")))
 
-        slope, intercept, r_value, p_value, std_err = linregress(elem_scores, comp_scores)
-        axs[0].scatter(elem_scores, comp_scores, c=plot_colors[i])
-        axs[0].plot(x_range, slope * x_range + intercept, c=plot_colors[i],
-                    label='{}\nr={:.2f}\np={:.2f}'.format(legend_names[i], r_value, p_value))
-
-        slope, intercept, r_value, p_value, std_err = linregress(elem_scores, accs)
-        axs[1].scatter(elem_scores, accs, c=plot_colors[i])
-        axs[1].plot(x_range, slope * x_range + intercept, c=plot_colors[i],
-                    label='{}\nr={:.2f}\np={:.2f}'.format(legend_names[i], r_value, p_value))
-
-        slope, intercept, r_value, p_value, std_err = linregress(comp_scores, accs)
-        axs[2].scatter(comp_scores, accs, c=plot_colors[i])
-        axs[2].plot(x_range, slope * x_range + intercept, c=plot_colors[i],
-                    label='{}\nr={:.2f}\np={:.2f}'.format(legend_names[i], r_value, p_value))
-
-    min_acc = 0
-    max_acc = 100
+    # Axis limits
     min_elemental_median = np.floor(min_elemental_median * 10) / 10  # Round down to 1 decimal place
     min_composition_median = np.floor(min_composition_median * 10) / 10
     min_joint_median = min(min_elemental_median, min_composition_median)
-    max_median = 1
-    axs[0].set_xlabel("Elemental Invariance Score")
-    axs[0].set_ylabel("Composition Invariance Score")
-    axs[0].set_xlim(min_joint_median, max_median)
-    axs[0].set_ylim(min_joint_median, max_median)
-    axs[0].set_aspect('equal')
-    axs[0].legend(loc='upper left')
-    axs[1].set_xlabel("Elemental Invariance Score")
-    axs[1].set_ylabel("Accuracy")
-    axs[1].set_xlim(min_joint_median, max_median)
-    axs[1].set_ylim(min_acc, max_acc)
-    axs[1].legend(loc='upper left')
-    axs[2].set_xlabel("Composition Invariance Score")
-    axs[2].set_ylabel("Accuracy")
-    axs[2].set_xlim(min_joint_median, max_median)
-    axs[2].set_ylim(min_acc, max_acc)
-    axs[2].legend(loc='upper left')
-    if pairs_only:
-        plt.savefig(os.path.join(save_path, "invariance-plots-pairs-only.pdf"), bbox_inches="tight")
-        print("Saved invariance plots to {}".format(os.path.join(save_path, "invariance-plots-pairs-only.pdf")))
+    if min_elemental_median < 0.5:
+        lim_elemental_median = 0
     else:
-        plt.savefig(os.path.join(save_path, "invariance-plots-all-compositions.pdf"), bbox_inches="tight")
-        print("Saved invariance plots to {}".format(os.path.join(save_path, "invariance-plots-all-compositions.pdf")))
+        lim_elemental_median = 0.5
+    if min_composition_median < 0.5:
+        lim_composition_median = 0
+    else:
+        lim_composition_median = 0.5
+    if min_joint_median < 0.5:
+        lim_joint_median = 0
+    else:
+        lim_joint_median = 0.5
+
+    scores_df = pd.DataFrame(scores_dict)
+    print(scores_df)
+    sns.set_theme()
+    sns.set_context("poster")
+    elem_comp_plot = sns.lmplot(data=scores_df, x="Elemental Invariance Score", y="Composition Invariance Score",
+                                hue="Experiment", col="Corruptions in Composition", col_wrap=2, height=12,
+                                legend=False, facet_kws=dict(sharex=False, sharey=False, xlim=(lim_joint_median, 1),
+                                                             ylim=(lim_joint_median, 1)))
+    elem_comp_plot.set_xlabels("")  # x labelling is handled by annotate_elem_comp
+    elem_comp_plot.map_dataframe(annotate_elem_comp)
+    elem_comp_fig = elem_comp_plot.fig
+    elem_comp_fig.savefig(os.path.join(save_path, f"invariance-plots-elem-comp-{dataset}.pdf"), bbox_inches="tight")
+    print("Saved invariance plot to {}".format(os.path.join(save_path, f"invariance-plots-elem-comp-{dataset}.pdf")))
+
+    elem_acc_plot = sns.lmplot(data=scores_df, x="Elemental Invariance Score", y="Accuracy (%)",
+                               hue="Experiment", col="Corruptions in Composition", col_wrap=2, height=12,
+                               legend=False, facet_kws=dict(sharex=False, sharey=False, xlim=(lim_elemental_median, 1),
+                                                            ylim=(0, 100)))
+    elem_acc_plot.set_xlabels("")  # x labelling is handled by annotate_elem_acc
+    elem_acc_plot.map_dataframe(annotate_elem_acc)
+    elem_acc_fig = elem_acc_plot.fig
+    elem_acc_fig.savefig(os.path.join(save_path, f"invariance-plots-elem-acc-{dataset}.pdf"), bbox_inches="tight")
+    print("Saved invariance plot to {}".format(os.path.join(save_path, f"invariance-plots-elem-acc-{dataset}.pdf")))
+
+    comp_acc_plot = sns.lmplot(data=scores_df, x="Composition Invariance Score", y="Accuracy (%)",
+                               hue="Experiment", col="Corruptions in Composition", col_wrap=2, height=12,
+                               legend=False, facet_kws=dict(sharex=False, sharey=False,
+                                                            xlim=(lim_composition_median, 1),
+                                                            ylim=(0, 100)))
+    comp_acc_plot.set_xlabels("")  # x labelling is handled by annotate_comp_acc
+    comp_acc_plot.map_dataframe(annotate_comp_acc)
+    comp_acc_fig = comp_acc_plot.fig
+    comp_acc_fig.savefig(os.path.join(save_path, f"invariance-plots-comp-acc-{dataset}.pdf"), bbox_inches="tight")
+    print("Saved invariance plot to {}".format(os.path.join(save_path, f"invariance-plots-comp-acc-{dataset}.pdf")))
 
 
 if __name__ == "__main__":
