@@ -3,6 +3,8 @@ __pycache__/
 inputs/
 outputs/
 writing/
+src/tests/
+src/figures/
 .*
 *.key
 !/.gitignore
