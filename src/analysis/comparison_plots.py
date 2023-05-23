@@ -66,7 +66,7 @@ def main(elemental_corruptions, experiments, legend_names, dataset, results_path
             if "process" not in results_file:
                 continue
 
-        assert len(all_accs) == 167  # hardcoded for EMNIST. EMNIST4 149. EMNIST5 167.
+        assert len(all_accs) == 167
 
         if i == 0:
             losses_df = pd.DataFrame(data=all_losses, index=[legend_names[i]])

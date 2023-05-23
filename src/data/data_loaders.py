@@ -42,7 +42,7 @@ def create_sampler_dataloaders(tr_dataset, val_dataset, tst_dataset, batch_size,
 
 def get_static_dataloaders(dataset, dataset_path, keep_classes, batch_size, shuffle, n_workers, pin_mem,
                            fixed_generator=None):
-    if dataset == "EMNIST" or dataset == "EMNIST5":
+    if dataset == "EMNIST":
         tr_ds = StaticEMNIST(dataset_path, keep_classes, which_set='train',
                              transform=torchvision.transforms.Compose(
                                  [ToTensor(), Normalize(EMNIST_MEAN, EMNIST_STD)]))
