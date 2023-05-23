@@ -16,19 +16,6 @@ echo $SLURM_ARRAY_TASK_ID
 
 module load openmind/singularity/3.5.0
 
-# To test the different methods set --dataset/----total-n-classes to each of:
-# EMNIST/47
-# CIFAR/10
-# FACESCRUB/388
-
-# And set --experiment to each of:
-# "CrossEntropy"
-# "Contrastive"
-# "Modules"
-# "AutoModules"
-# "ImgSpace"
-
-# Trades off ram for runtime. Needs at least 16G, with 12G many jobs hang indefinitely.
 jobs_per_gpu=4
 for ((number=0; number<$jobs_per_gpu; number++))
 do

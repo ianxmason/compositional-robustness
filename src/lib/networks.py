@@ -87,7 +87,6 @@ def create_emnist_network(total_n_classes, experiment, corruption_names, dev):
     )
     network_block_ckpt_names.append("{}_ConvBlock3_{}.pt".format(experiment, '-'.join(corruption_names)))
 
-    # Extra block for more capacity. If used changed next block from 256 * 4 * 4 to 256 * 2 * 2.
     network_blocks.append(
         nn.Sequential(
             SimpleConvBlock(256, 256, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.5)  # 0.5
@@ -459,7 +458,7 @@ def create_facescrub_network(total_n_classes, experiment, corruption_names, dev)
 
 
 def create_facescrub_modules(experiment, corruption_names, dev):
-    # We use existing inception blocks as modules where possible. Elsewhere use simple convolutional layers.
+    # We use existing inception blocks as modules where possible. Elsewhere, use simple convolutional layers.
     inception = inception_v3(pretrained=False)
 
     modules = []

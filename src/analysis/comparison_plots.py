@@ -1,4 +1,7 @@
-# Plot histogram, heatmap, box plots comparing CrossEntropy, Contrastive, Modules etc.
+"""
+Plot box plots and heat maps comparing CrossEntropy, Contrastive, Modules etc.
+Run from inside the analysis directory as: python comparison_plots.py
+"""
 import argparse
 import os
 import sys
@@ -174,7 +177,7 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=38164641, help="random seed")
     args = parser.parse_args()
 
-    # Set seeding # Final: 13579111 24681012 36912151. Hparams: 48121620
+    # Set seeding # Final: 38164641 13579111 24681012. Hparams: 48121620
     reset_rngs(seed=args.seed, deterministic=True)
 
     variance_dir_name = f"seed-{args.seed}"  # f"lr-0.01_weight-1.0"
@@ -183,13 +186,12 @@ if __name__ == "__main__":
     args.save_path = os.path.join(args.save_path, args.dataset, variance_dir_name)
     mkdir_p(args.save_path)
 
-    # Most common experiments
     experiments = ["CrossEntropy",
                    "Contrastive",
-                   "AutoModules"]  # "Modules",
+                   "AutoModules"]
                    # "ImgSpaceIdentityClassifier", "ImgSpaceJointClassifier"]
 
-    legend_names = ["ERM", "Contrastive", "Modular"] #  "AE-Modular-ID", "AE-Modular-Joint"]
+    legend_names = ["ERM", "Contrastive", "Modular"]  # "AE-Modular-ID", "AE-Modular-Joint"]
 
     with open(os.path.join(args.data_root, "corruption_names.pkl"), "rb") as f:
         all_corruptions = pickle.load(f)
@@ -201,5 +203,4 @@ if __name__ == "__main__":
             if corr not in elemental_corruptions:
                 elemental_corruptions.append(corr[0])
 
-    # Run from inside analysis directory as: python comparison_plots.py
     main(elemental_corruptions, experiments, legend_names, args.dataset, args.results_path, args.save_path)

@@ -78,9 +78,6 @@ ax.text(6.7, 0, -2.6, 'M1', color='black')
 ax.text(10, 2.1, -2.2, 'M2', color='black')
 ax.text(8.7, 0, -1.3, 'M3', color='black')
 
-
-# Voxels is used to customizations of
-# the sizes, positions and colors.
 ax.voxels(data, facecolors=colors, edgecolors='grey')
 
 plt.tight_layout()

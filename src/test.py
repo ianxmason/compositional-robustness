@@ -254,7 +254,7 @@ def test_monolithic(experiment, validate, dataset, data_root, ckpt_path, save_pa
     files = ['_'.join(f.split('_')[2:]) for f in files if f.split('_')[0] == experiment]
     files.sort(key=lambda x: len(x.split('-')))
     ckpt = files[-1]
-    assert len(ckpt.split('-')) == 7  # hardcoded for EMNIST. 8 EMNIST4. 7 EMNIST5.
+    assert len(ckpt.split('-')) == 7
     # Load the ckpt
     if check_if_run and os.path.exists(os.path.join(save_path, "{}_{}_all_losses_process_{}_of_{}.pkl".format(
                                                     experiment, ckpt[:-3], process, total_processes))):
@@ -282,7 +282,7 @@ def test_monolithic(experiment, validate, dataset, data_root, ckpt_path, save_pa
     with open(os.path.join(args.data_root, "corruption_names.pkl"), "rb") as f:
         corruptions = pickle.load(f)
     corruptions.sort()
-    assert len(corruptions) == 167  # hardcoded for EMNIST. 149 EMNIST4. 167 EMNIST5.
+    assert len(corruptions) == 167
     assert total_processes <= len(corruptions)
     assert process < total_processes
 
@@ -357,7 +357,7 @@ def test_modules(experiment, validate, dataset, data_root, ckpt_path, save_path,
             raise ValueError("Early stopping ckpt found {}. Training hasn't finished yet".format(f))
     files = [f for f in files if f.split('_')[0] == experiment]
     module_ckpts = [f for f in files if len(f.split('-')) == 2]
-    assert len(module_ckpts) == 6  # hardcoded for EMNIST5.
+    assert len(module_ckpts) == 6
     # Load the ckpt
     if check_if_run and os.path.exists(os.path.join(save_path, "{}_all_losses_process_{}_of_{}.pkl".format(
                                                     experiment, process, total_processes))):
@@ -423,19 +423,6 @@ def test_modules(experiment, validate, dataset, data_root, ckpt_path, save_path,
         sys.stdout.flush()
         trained_classes = list(range(total_n_classes))
 
-        # _, _, tst_dl = get_static_dataloaders(dataset,os.path.join(data_root, "Contrast"), trained_classes, batch_size,
-        #                                       False, n_workers, pin_mem)
-        # vis_path = '/om2/user/imason/compositions/figs/EMNIST_TEMP/'
-        # x, y = next(iter(tst_dl))
-        # fig_name = "{}_old.png".format('-'.join(test_corruption))
-        # fig_path = os.path.join(vis_path, fig_name)
-        # # Denormalise Images
-        # x = x.detach().cpu().numpy()
-        # y = y.detach().cpu().numpy()
-        # x = dt.denormalize_255(x, np.array(CIFAR10_MEAN).astype(np.float32), np.array(CIFAR10_STD).astype(np.float32)).astype(np.uint8)
-        # # And visualise
-        # visualise_data(x[:25], y[:25], save_path=fig_path, title=fig_name[:-4], n_rows=5, n_cols=5)
-
         identity_path = os.path.join(data_root, "Identity")
         if dataset == "EMNIST":
             transforms = [torchvision.transforms.Lambda(lambda im: im.convert('L'))]
@@ -451,18 +438,6 @@ def test_modules(experiment, validate, dataset, data_root, ckpt_path, save_path,
         else:
             _, _, tst_dl = get_transformed_static_dataloaders(dataset, identity_path, transforms, trained_classes,
                                                               batch_size, False, n_workers, pin_mem)
-
-        # vis_path = '/om2/user/imason/compositions/figs/EMNIST_TEMP/'
-        # x, y = next(iter(tst_dl))
-        # fig_name = "{}_new.png".format('-'.join(test_corruption))
-        # fig_path = os.path.join(vis_path, fig_name)
-        # # Denormalise Images
-        # x = x.detach().cpu().numpy()
-        # y = y.detach().cpu().numpy()
-        # x = dt.denormalize_255(x, np.array(CIFAR10_MEAN).astype(np.float32), np.array(CIFAR10_STD).astype(np.float32)).astype(np.uint8)
-        # # And visualise
-        # visualise_data(x[:25], y[:25], save_path=fig_path, title=fig_name[:-4], n_rows=5, n_cols=5)
-
 
         test_modules = []
         test_module_levels = []
@@ -522,7 +497,7 @@ def test_autoencoders(experiment, validate, dataset, data_root, ckpt_path, save_
     ae_ckpts = [f for f in files if len(f.split('-')) == 2]
     ae_corrs = list(set([f.split('_')[-1][:-3] for f in ae_ckpts]))
     ae_corrs.sort()
-    assert len(ae_corrs) == 6  # hardcoded for EMNIST5. Encoder and Decoder.
+    assert len(ae_corrs) == 6
 
     # Load the ckpt
     if check_if_run and os.path.exists(os.path.join(save_path, "{}_all_losses_process_{}_of_{}.pkl".format(
@@ -600,7 +575,7 @@ def test_autoencoders(experiment, validate, dataset, data_root, ckpt_path, save_
     with open(os.path.join(args.data_root, "corruption_names.pkl"), "rb") as f:
         corruptions = pickle.load(f)
     corruptions.sort()
-    assert len(corruptions) == 167  # hardcoded for EMNIST. 149 EMNIST4. 167 EMNIST5.
+    assert len(corruptions) == 167
     assert total_processes <= len(corruptions)
     assert process < total_processes
 
@@ -750,7 +725,7 @@ if __name__ == "__main__":
     if args.dataset not in ["EMNIST", "CIFAR", "FACESCRUB"]:
         raise ValueError("Dataset {} not implemented".format(args.dataset))
 
-    # Set seeding # Final: 13579111 24681012 36912151. Hparams: 48121620
+    # Set seeding # Final: 38164641 13579111 24681012. Hparams: 48121620
     reset_rngs(seed=args.seed, deterministic=True)
 
     # Set device

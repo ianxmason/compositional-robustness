@@ -5,6 +5,9 @@ elemental corruptions). We also want to use the validation set.
 Additionally, for two step methods we want to validate step one using the mean squared error of the autoencoders on the
 elemental corruptions they are trained on and the accuracy of the backbone network for the modular approach on the
 Identity data.
+
+Example command to run without slurm:
+CUDA_VISIBLE_DEVICES=0 python validate.py --dataset EMNIST --experiment Modules --total-n-classes 47 --lr 1.0 --weight 1.0 --pin-mem
 """
 import argparse
 import os
@@ -20,19 +23,6 @@ from lib.networks import create_emnist_network, create_emnist_modules, create_em
                          create_cifar_network, create_cifar_modules, create_cifar_autoencoder, \
                          create_facescrub_network, create_facescrub_modules, create_facescrub_autoencoder
 from lib.utils import *
-
-
-"""
-1. Modules on identity - validation accuracy
-2. AEs on training corruptions - validation MSE (average over all corruptions). Visualise one batch.
-3. Contrastive on training corruptions - validation accuracy (average over all corruptions)
-4. Cross entropy on training corruptions - validation accuracy (average over all corruptions)
-5. Modules on training corruptions - validation accuracy (average over all corruptions)
-6. AE identity classifier - validation accuracy (average over all corruptions)
-7. AE joint classifier - validation accuracy (average over all corruptions)
-
-print hparams, print results
-"""
 
 
 def val_module_backbone(experiment, dataset, data_root, ckpt_path, total_n_classes, batch_size, n_workers, pin_mem,
@@ -402,15 +392,6 @@ if __name__ == '__main__':
     args.vis_path = os.path.join(args.vis_path, args.dataset, "autoencoder_visualisations", variance_dir_name)
     if "ImgSpace" in args.experiment:
         mkdir_p(args.vis_path)
-
-    """
-    CUDA_VISIBLE_DEVICES=4 python validate.py --dataset EMNIST --experiment Modules --total-n-classes 47 --lr 1.0 --weight 1.0 --pin-mem 
-    CUDA_VISIBLE_DEVICES=4 python validate.py --dataset EMNIST --experiment ImgSpace --total-n-classes 47 --lr 1.0 --weight 1.0 --pin-mem
-    CUDA_VISIBLE_DEVICES=4 python validate.py --dataset EMNIST --experiment CrossEntropy --total-n-classes 47 --lr 1.0 --weight 1.0 --pin-mem
-    CUDA_VISIBLE_DEVICES=4 python validate.py --dataset EMNIST --experiment Contrastive --total-n-classes 47 --lr 1.0 --weight 1.0 --pin-mem
-    CUDA_VISIBLE_DEVICES=4 python validate.py --dataset EMNIST --experiment AutoModules --total-n-classes 47 --lr 1.0 --weight 1.0 --pin-mem
-    CUDA_VISIBLE_DEVICES=4 python validate.py --dataset EMNIST --experiment ImgSpace --total-n-classes 47 --lr 1.0 --weight 1.0 --pin-mem
-    """
 
     if "Modules" in args.experiment:
         val_module_backbone("Modules", args.dataset, args.data_root, args.ckpt_path, args.total_n_classes,

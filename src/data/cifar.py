@@ -136,8 +136,6 @@ def _train_val_split(sorted_imgs, sorted_lbls):
 
 
 if __name__ == "__main__":
-    # To check if it worked can count the files in each corruption directory and check they are the same == 60034
-    # https://stackoverflow.com/questions/15216370/how-to-count-number-of-files-in-each-directory
     # PARAMS
     parser = argparse.ArgumentParser(description='Generate multiple corruptions in parallel.')
     parser.add_argument('--corruption-ID', type=int, default=0, help="which corruption to generate")
@@ -159,7 +157,6 @@ if __name__ == "__main__":
         dset_names = ['train', 'valid', 'test']
         np.random.seed(seed)
         for (sorted_imgs, sorted_labels), dset_name in zip(all_data, dset_names):
-            # For CIFAR we only need the elemental corruptions
             all_corruptions = [['Identity'], ['Contrast'], ['GaussianBlur'], ['ImpulseNoise'], ['Invert'],
                                ['Rotate90'], ['Swirl']]
 

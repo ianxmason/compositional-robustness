@@ -1,4 +1,8 @@
-# Plot histogram, heatmap, box plots comparing CrossEntropy, Contrastive, Modules etc.
+"""
+Plots correlations between invariance scores and accuracies.
+
+Run from inside analysis directory as: python invariance_plots.py --dataset EMNIST --total-n-classes 47
+"""
 import argparse
 import os
 import sys
@@ -15,7 +19,6 @@ from analysis.plotting import *
 
 PLOT_COLORS = sns.color_palette()
 
-# Todo: Refactor the three annotate functions into one
 def annotate_elem_comp(data, **kws):
     plot_elem_scores = data["Elemental Invariance Score"]
     plot_comp_scores = data["Composition Invariance Score"]
@@ -29,8 +32,6 @@ def annotate_elem_comp(data, **kws):
         if l_name == plot_experiment:
             ax.text(0.5, -0.15 - l_idx * 0.05, f"\u2022 {plot_experiment}. r = {r_value:.2f}. p = {p_value:.2f}.",
                     c=PLOT_COLORS[l_idx], fontsize='medium', horizontalalignment='center', transform=ax.transAxes)
-            # x_range = np.arange(0, 1.05, 0.05)
-            # ax.plot(x_range, slope * x_range + intercept, c=PLOT_COLORS[l_idx], linestyle="--")
 
 
 def annotate_elem_acc(data, **kws):
@@ -46,8 +47,6 @@ def annotate_elem_acc(data, **kws):
         if l_name == plot_experiment:
             ax.text(0.5, -0.15 - l_idx * 0.05, f"\u2022 {plot_experiment}. r = {r_value:.2f}. p = {p_value:.2f}.",
                     c=PLOT_COLORS[l_idx], fontsize='medium', horizontalalignment='center', transform=ax.transAxes)
-            # x_range = np.arange(0, 1.05, 0.05)
-            # ax.plot(x_range, slope * x_range + intercept, c=PLOT_COLORS[l_idx], linestyle="--")
 
 
 def annotate_comp_acc(data, **kws):
@@ -63,8 +62,6 @@ def annotate_comp_acc(data, **kws):
         if l_name == plot_experiment:
             ax.text(0.5, -0.15 - l_idx * 0.05, f"\u2022 {plot_experiment}. r = {r_value:.2f}. p = {p_value:.2f}.",
                     c=PLOT_COLORS[l_idx], fontsize='medium', horizontalalignment='center', transform=ax.transAxes)
-            # x_range = np.arange(0, 1.05, 0.05)
-            # ax.plot(x_range, slope * x_range + intercept, c=PLOT_COLORS[l_idx], linestyle="--")
 
 
 
@@ -117,7 +114,7 @@ def main(all_corruptions, experiments, legend_names, dataset, total_n_classes, r
             if "process" not in results_file:
                 continue
 
-        assert len(all_accs) == 167  # hardcoded for EMNIST.
+        assert len(all_accs) == 167
 
         if i == 0:
             accs_df = pd.DataFrame(data=all_accs, index=[experiment])
@@ -226,42 +223,9 @@ def main(all_corruptions, experiments, legend_names, dataset, total_n_classes, r
                 # Difference between max and min firing rate for preferred category is worst case invariance score
                 elemental_invariance_score = 1 - (elemental_neuron_df[elemental_pref_cat].max()
                                                   - elemental_neuron_df[elemental_pref_cat].min())
-
-                # Firing rate has decreased for the composition, so invariance change is when it increases to max
-                # composition_drop_invariance_score = (elemental_neuron_df[elemental_pref_cat].max()
-                #                                      - composition_neuron_df.iloc[-1][elemental_pref_cat])
-                # # Firing rate has increased for the composition, so invariance change is when it drops to the min
-                # composition_incr_invariance_score = (composition_neuron_df.iloc[-1][elemental_pref_cat]
-                #                                      - elemental_neuron_df[elemental_pref_cat].min())
-                #
-                # composition_invariance_score = 1 - max(abs(composition_incr_invariance_score),
-                #                                        abs(composition_drop_invariance_score))
-
                 # max() is worst case invariance. min() is best case invariance - i.e. want to be close to one elemental
                 composition_invariance_score = 1 - (elemental_neuron_df[elemental_pref_cat] -
                                                     composition_neuron_df.iloc[-1][elemental_pref_cat]).abs().min()
-
-                # print(composition_neuron_df)
-                # print(max_activations[neuron_idx])
-                # print(elemental_invariance_score)
-                # print(composition_invariance_score)
-                # print(elem_max, elem_min, comp_max, comp_min)
-                # print("++++++++++++++++++++++++++++++++")
-                # print(elemental_invariance_score, composition_invariance_score)
-
-
-                # Without preferred category
-                # elemental_invariance_score = 1 - ((elemental_neuron_df.max() - elemental_neuron_df.min()).mean())
-                #
-                # composition_invariance_diff = (elemental_neuron_df.max() - composition_neuron_df.iloc[-1]).abs()
-                # composition_invariance_diff = pd.concat([composition_invariance_diff,
-                #                                          (composition_neuron_df.iloc[-1] - elemental_neuron_df.min()).abs()],
-                #                                         axis=1)
-                # composition_invariance_score = 1 - composition_invariance_diff.max(axis=1).mean()
-                # print(composition_neuron_df)
-                # print(composition_invariance_diff)
-                # print(composition_invariance_diff.max(axis=1))
-
                 assert elemental_invariance_score >= 0
                 assert composition_invariance_score >= 0
                 elemental_invariance_scores.append(elemental_invariance_score)
@@ -353,7 +317,7 @@ if __name__ == "__main__":
     parser.add_argument('--pairs-only', action='store_true', help="Plots only the compositions with 2 corruptions")
     args = parser.parse_args()
 
-    # Set seeding # Final: 13579111 24681012 36912151. Hparams: 48121620
+    # Set seeding # Final: 38164641 13579111 24681012. Hparams: 48121620
     reset_rngs(seed=args.seed, deterministic=True)
 
     variance_dir_name = f"seed-{args.seed}"  # f"lr-0.01_weight-1.0"
@@ -363,20 +327,15 @@ if __name__ == "__main__":
     args.save_path = os.path.join(args.save_path, args.dataset, variance_dir_name)
     mkdir_p(args.save_path)
 
-    # Most common experiments
     experiments = ["CrossEntropy",
                    "Contrastive",
-                   "AutoModules"]  # "Modules",
+                   "AutoModules"]
                    # "ImgSpaceIdentityClassifier", "ImgSpaceJointClassifier"]
 
-    legend_names = ["ERM", "Contrastive", "Modular"] #  "AE-Modular-ID", "AE-Modular-Joint"]
+    legend_names = ["ERM", "Contrastive", "Modular"]  # "AE-Modular-ID", "AE-Modular-Joint"]
 
     with open(os.path.join(args.data_root, "corruption_names.pkl"), "rb") as f:
         all_corruptions = pickle.load(f)
-
-    """
-    Run from inside analysis directory as: python invariance_plots.py --dataset EMNIST --total-n-classes 47 --pairs-only
-    """
 
     main(all_corruptions, experiments, legend_names, args.dataset, args.total_n_classes, args.results_path,
          args.activations_path, args.save_path, args.pairs_only)

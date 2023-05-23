@@ -7,8 +7,8 @@ e.g. Flip, No Flip, No Flip, Flip (for first 4 images in the dataset, and the sa
 These functions are just minor edits to the torchvision transforms, to allow for a seed to be set
 https://pytorch.org/vision/stable/transforms.html#functional-transforms
 
-See here https://github.com/pytorch/vision/issues/9  kulikovv
-Iterating seeds by one and resetting the seed all the time isn't ideal but seems to work
+See here https://github.com/pytorch/vision/issues/9 comment from kulikovv
+Iterating seeds by one and resetting the seed all the time isn't ideal, but it works.
 """
 import torch
 import torchvision.transforms.functional as TF

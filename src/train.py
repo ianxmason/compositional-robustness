@@ -45,18 +45,10 @@ def train_identity_network(network_blocks, network_block_ckpt_names, dataset, da
                                                            train_classes, batch_size, True, n_workers,
                                                            pin_mem)
 
-    # OLD VERSION
-    # corruption_path = os.path.join(data_root, "Identity")
-    # train_classes = list(range(total_n_classes))
-    # trn_dl, val_dl, _ = get_static_dataloaders(dataset, corruption_path, train_classes, batch_size, True, n_workers,
-    #                                            pin_mem)
-
     # Network & Optimizer Set Up
     all_parameters = []
     for block in network_blocks:
         all_parameters += list(block.parameters())
-
-    # optim = torch.optim.Adam(all_parameters, lr)  # Todo: used this for original EMNIST - test EMNIST with new set up
     optim = torch.optim.SGD(all_parameters, lr, momentum=0.9, weight_decay=5e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=max_epochs)
 
@@ -87,7 +79,6 @@ def train_identity_network(network_blocks, network_block_ckpt_names, dataset, da
             loss.backward()
             optim.step()
         scheduler.step()
-        # print(optim.param_groups[0]['lr'])
         results = [epoch,
                    epoch_loss / len(trn_dl),
                    epoch_acc / len(trn_dl)]
@@ -149,8 +140,6 @@ def train_classifiers(dataset, data_root, ckpt_path, logging_path, experiment, t
     Classifier 2 is trained on all corruptions jointly, passing corrupted data through the corresponding autoencoder
     and then classifying the output.
     """
-
-    # Hardcoded, a bit annoying to change the logic to make it not hardcoded
     elemental_corruptions = ["Contrast", "GaussianBlur", "ImpulseNoise", "Invert", "Rotate90", "Swirl"]
     for elem_corr in elemental_corruptions:
         if not os.path.exists(os.path.join(ckpt_path, "{}_Encoder_{}-Identity.pt".format(experiment, elem_corr))):
@@ -206,13 +195,6 @@ def train_classifiers(dataset, data_root, ckpt_path, logging_path, experiment, t
         trn_dls.append(trn_dl)
         val_dls.append(val_dl)
 
-    # OLD VERSION
-    # for corruption_path, generator in zip(corruption_paths, generators):
-    #     trn_dl, val_dl, _ = get_static_dataloaders(dataset, corruption_path, train_classes, single_corr_bs,
-    #                                                True, n_workers, pin_mem, fixed_generator=generator)
-    #     trn_dls.append(trn_dl)
-    #     val_dls.append(val_dl)
-
     # Create Network
     if dataset == "EMNIST":
         network_blocks, network_block_ckpt_names = create_emnist_network(total_n_classes, experiment + "Classifier",
@@ -239,8 +221,6 @@ def train_classifiers(dataset, data_root, ckpt_path, logging_path, experiment, t
     all_parameters = []
     for block in network_blocks:
         all_parameters += list(block.parameters())
-
-    # optim = torch.optim.Adam(all_parameters, lr)  # Todo: used for EMNIST, test without
     initial_epoch = 0
     optim = torch.optim.SGD(all_parameters, lr, momentum=0.9, weight_decay=5e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=max_epochs)
@@ -387,13 +367,6 @@ def get_contrastive_abstraction_levels(experiment, corruption_names, dataset, tr
                                                                  lr, cross_entropy_loss_fn, accuracy_fn,
                                                                  contrastive_loss_fn, weight, total_n_classes,
                                                                  single_corr_bs, dev)
-    elif "ModLevel" in experiment:  # Hardcoded to match the best AutoModules levels of abstraction seen so far
-        if dataset == "EMNIST":
-            contrastive_levels = [1, 1, 1, 2, 3, 4]
-        elif dataset == "CIFAR":  # Todo: unknown at the moment
-            contrastive_levels = [1, 1, 1, 2, 3, 4]
-        elif dataset == "FACESCRUB":  # Todo: unknown at the moment
-            contrastive_levels = [1, 1, 1, 2, 3, 4]
     else:  # Penultimate layer
         if dataset == "EMNIST":
             contrastive_levels = [5] * (len(corruption_names) - 1)
@@ -531,7 +504,6 @@ def find_contrastive_abstraction_levels(corruption_names, dataset, trn_dls, val_
 
     for k, v in val_accs.items():
         val_accs[k] = [x / num_repeats for x in v]
-    # print(val_accs)
     abstraction_levels = []
     for corr in corruption_names:
         if corr == "Identity":
@@ -576,12 +548,10 @@ def find_module_abstraction_level(network_blocks, dataset, trn_dls, val_dls, log
                                   lr, cross_entropy_loss_fn, accuracy_fn, contrastive_loss_fn, weight, single_corr_bs,
                                   dev, num_epochs=5, num_repeats=1):
     """
-    Tries training the network with modules at every level of abstraction. Trains for num_iterations update steps.
+    Tries training the network with modules at every level of abstraction. Trains for num_epochs epochs.
     Repeats the experiment num_repeats times. Returns the level of abstraction that gives the best mean performance.
 
     Whichever level of abstraction lowers the training loss the fastest is chosen as the best level of abstraction.
-
-    Optional ToDo: Throw a warning if means are close to each other (within 1 std).
     """
     val_accs = {}
     train_accs = {}  # For plotting learning curves over num_iterations
@@ -914,9 +884,6 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
 
             print("Epoch: {}".format(epoch))
             print("Learning rate: {}".format(optim.param_groups[0]['lr']))
-
-            # # Time batches
-            # start_time = time.time()
             for i, trn_data_tuples in enumerate(zip(*trn_dls), 1):
                 x_trn, y_trn = generate_batch(trn_data_tuples, dev)
                 optim.zero_grad()
@@ -951,12 +918,7 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
                     raise NotImplementedError("Experiment {} not implemented".format(experiment))
                 loss.backward()
                 optim.step()
-                # # Time batches
-                # print("Batch {} of {} in epoch {} took {:.2f} seconds.".format(i, len(trn_dl), epoch,
-                #                                                                time.time() - start_time))
-                # logger.info("Batch {} of {} in epoch {} took {:.2f} seconds.".format(i, len(trn_dl), epoch,
-                #                                                                time.time() - start_time))
-                # start_time = time.time()
+
             # Logging
             if "CrossEntropy" in experiment:
                 results = [epoch, epoch_ce_loss / len(trn_dls[0]), epoch_acc / len(trn_dls[0])]
@@ -1132,7 +1094,7 @@ if __name__ == "__main__":
     if args.dataset not in ["EMNIST", "CIFAR", "FACESCRUB"]:
         raise ValueError("Dataset {} not implemented".format(args.dataset))
 
-    # Set seeding # Final: 13579111 24681012 36912151. Hparams: 48121620
+    # Set seeding # Final: 38164641 13579111 24681012. Hparams: 48121620
     reset_rngs(seed=args.seed, deterministic=True)
 
     # Set device
@@ -1170,12 +1132,12 @@ if __name__ == "__main__":
                 corruptions.append(corr)
         else:
             raise ValueError("Only expect the identity to appear as its own corruption")
-    assert len(corruptions) == 64  # hardcoded - number of combinations (not permutations) of corruptions
+    assert len(corruptions) == 64  # number of combinations (not permutations) of corruptions
 
     if "Modules" in args.experiment or "ImgSpace" in args.experiment:  # Train on all elemental corruptions separately
         corruptions = [corr for corr in corruptions if len(corr) == 2]
         assert len(corruptions) == 6
-        corruptions = corruptions[args.corruption_ID:args.corruption_ID+1]  # parallelisation with slurm
+        corruptions = corruptions[args.corruption_ID:args.corruption_ID+1]  # parallelization with slurm
     elif "Contrastive" in args.experiment or "CrossEntropy" in args.experiment:  # Train on all corruptions together
         max_corr_count = max([len(corr) for corr in corruptions])
         corruptions = [corr for corr in corruptions if len(corr) == max_corr_count]
@@ -1185,7 +1147,7 @@ if __name__ == "__main__":
          args.weight, args.temperature, args.total_n_classes, args.max_epochs, args.batch_size, args.lr,
          args.n_workers, args.pin_mem, dev, args.vis_data, args.check_if_run)
 
-    if "ImgSpace" in args.experiment:  # Trains classifier on top of autoencoded images
+    if "ImgSpace" in args.experiment:  # Trains classifier on top of auto-encoded images
         train_classifiers(args.dataset, args.data_root, args.ckpt_path, args.logging_path, args.experiment,
                           args.total_n_classes, args.max_epochs, args.batch_size, args.lr,
                           args.n_workers, args.pin_mem, dev, args.check_if_run)

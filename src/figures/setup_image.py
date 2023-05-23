@@ -1,3 +1,7 @@
+"""
+Gets a few of the elemental corruption images to use in figures
+Use these images: CIFAR: 2.png or 3.png. EMNIST: 14.png or 3.png FACESCRUB 20.png or 76.png
+"""
 import sys
 import PIL.Image
 import numpy as np
@@ -5,11 +9,7 @@ sys.path.append("../")
 import data.data_transforms as dt
 from lib.utils import mkdir_p
 
-
-# Get a few of the corrupted images to use in the set-up figure
-
 dset = "FACESCRUB"
-# Use these images: CIFAR: 2/3.png. EMNIST: 14/3.png FACESCRUB 20/76.png
 base_img_path = f"/om2/user/imason/compositions/datasets/{dset}/Identity/train/20/76.png"
 save_path = f"/om2/user/imason/compositions/figs/{dset}/example_data/"
 mkdir_p(save_path)
