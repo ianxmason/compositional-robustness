@@ -1,5 +1,5 @@
-# Compositions/Invariance is Not Enough
-Which neural mechanisms underpin combinatorial generalisation?
+# Modularity Trumps Invariance for Compositonal Robustness
+This repository contains the code for the paper Modularity Trumps Invariance for Compositonal Robustness.
 
 ## Dependencies
 The dependencies for this project can be found in ```docker/Dockerfile```. The Docker
@@ -23,7 +23,7 @@ and path to the Singularity image (```/om2/user/imason/singularity/imason-pytorc
 
 ## Data Generation
 
-Everything is run from the ```src``` directory.
+All commands should be run from inside the ```src``` directory.
 
 #### EMNIST
 First download the base dataset to the directory where you want to generate the training data. 
@@ -35,8 +35,7 @@ _get_emnist_datasets("<path to data root>")
 This should create a directory ```EMNIST/raw``` in ```<path to data root>``` containing the base dataset.
 
 To generate the corruptions for training.
-Run the first python command in ```generate_data.sh```.
-You will need to add the ```--data-root``` flag to match your ```<path to data root>```.
+Run the first python command in ```generate_data.sh``` after adding the ```--data-root``` flag to match your ```<path to data root>```.
 ```
 sbatch scripts/generate_data.sh
 ```
@@ -72,7 +71,7 @@ You will need to change the absolute path to your data root in line 8 before run
 ```python data/sample_corruptions.py ```
 This file is a random sample to get all the combinations and permuations of corruptions that will be used for testing our models.
 
-CIFAR and FACESCRUB also need a corruption names file. The sampling script can be run again, but easiest is to copy the EMNIST file
+CIFAR and FACESCRUB also need a corruption names file. The sampling script can be run again, but easiest is to copy the EMNIST file.
 In your data root run:
 ```
 cp EMNIST/corruption_names.pkl CIFAR/
@@ -89,71 +88,70 @@ After generation you should have in your data root directories called
 Inside each of these directories you can run the following command to count the number of files
 ```du -a | cut -d/ -f2 | sort | uniq -c | sort -nr```
 
-This should output something like this for each of the datasets (the numbers are important)
+This should output something like this for each dataset (the numbers are important and should match)
 ![file count](assets/file_count.png)
 
-You can also inspect the data visually
-You can look directly in the folders in the data root or you can use the script in the tests directory
-```check_data.py``` (manually changing the root_dir and save_path) to generate a much smaller version of the datasets 
-which can be copied and inspected locally
-
-
 ## Training
-Everything is run from the ```src``` directory.
 
-Figure showing monolithic, modular, identity training. 
-Broken into step_one, step_two. Which scripts to run etc.
+![training methods](assets/methods.png)
+To train the different methods we use the scripts ```scripts/train_monolithic.sh```, ```scripts/train_modules.sh``` and
+```scripts/train_identity.sh```. The different methods we consider are shown in the above figure, where blue boxes are 
+trainable parameters and gray boxes are frozen. The monolithic methods (Cross Entropy and Contrastive training) require
+one command to run, whereas the modular methods (AutoModules and ImgSpace) require two commands.
 
-Description of how to do the training.
+To train networks using the cross entropy or contrastive loss run the relevant command in ```scripts/train_monolithic.sh```.
+For example, to train a network on EMNIST using the cross entropy loss run the first line beginning ```singularity exec ...```
+which has ```--experiment "CrossEntropy"```. 
+Commands are also given for other datasets and for contrastive training. You will need to add the ```--data-root``` flag
+to point to your data directory and set ```--ckpt-path```, ```--logging-path``` and ```--vis-path``` to point to where
+you want to save the checkpoints, logs and data visualisations.
 
-Something like
-For cross-entropy/contrastive: run the correct line in train_monolithic.sh
+To train the modular approach first run the relevant command for the dataset you are using from 
+```scripts/train_identity.sh```. After this network has finished training run the command for the dataset you are using from ```scripts/train_modules.sh```,
+this is the command with ```--experiment "AutoModules"```. For both commands again set ```--data-root```,
+```--ckpt-path```, ```--logging-path``` and ```--vis-path```.
 
-For modules: first run train_identity.sh to pretrain the network on clean data.
-Then run train_modules.sh to train the modules
-
-For ImgSpace: first run the correct line in train_modules.sh to train the Autoencoders
-Then run the correct line in train_monolithic.sh to train the classifiers on top.
-
-These should create ckpts and logs for each method. Then run test.sh setting --dataset, --total-n-classes and --experiment to the correct values
-
-Then run comparison_plots.py and learning_curves.py on polestar to get the result plots.
-Setting the arguments in the python scripts correctly
-
+To train auto-encoders to undo each corruption, first run the relevant command for the dataset you are using from 
+```scripts/train_modules.sh```, this is the command with ```--experiment "ImgSpace"```. Once the auto-encoders are 
+trained, two different classifiers can be trained using the command in ```scripts/train_monolithic.sh``` with
+```--experiment "ImgSpace"```. Again set ```--data-root```, ```--ckpt-path```, ```--logging-path``` and ```--vis-path```.
 
 
 ## Testing & Analysis
-Description of how to the testing and the plotting.
 
-Deephys? (Or delete deephys files?)
+If the code runs correctly model checkpoints should be saved in the directory specified by ```--ckpt-path```. The 
+different methods can then be evaluated by running the ```scripts/test.sh``` script. 
+Here the arguments ```--dataset```, ```--total-n-classes``` and ```--experiment```
+should be set to the experiment that you wish to evaluate. The options for ```--dataset``` are ```EMNIST```, ```CIFAR```,
+and ```FACESCRUB``` which have ```--total-n-classes``` of ```47```, ```10``` and ```388``` respectively. The options for ```--experiment```
+are ```CrossEntropy```, ```Contrastive```, ```AutoModules``` and ```ImgSpace```.
+
+Once again you will need to point to the directories where the data is stored with ```--data-root``` and where the 
+checkpoints are stored with ```--ckpt-path```. The arguments ```--save-path```, ```--activations-path``` and ```--vis-path```
+should be set to the locations where you want to save the results, neural activations and visualisations respectively.
+
+Once the testing completes, box plots comparing experiments can be generated by running ```python comparison_plots.py```
+from inside the ```analysis``` directory. Correlations between invariance scores and compositional robustness can be 
+generated by running ```python invariance_plots.py```. Flags ```--data-root```, ```--results-path```, ```save-path```
+and ```--activations-path``` need to be set to the correct directories
+
+The analysis directory also contains code for saving and formatting neural activity for use with the interpretability
+tool [Deephys](https://deephys.org).
 
 ## Hyperparameter Searching
-Difference for hyperparameter searching 
-E.g. change file name. step_one_test.py
-
-Link to sheet or csv of hyperparameter searching results.
-
-For two step methods, first step one is hparam optimised alone, then step two optimised
-on top of the best step one setting.
+For completeness, we provide the results of our hyper-parameter search [here](https://docs.google.com/spreadsheets/d/14tKjwqdU2hVBjWhOiVKYzchEYI6AboL41eBMWeUtJxA/edit?usp=sharing)
+The training process is as described above but models are evaluated using the code in ```validate.py```. For two step
+methods, we find the best hyper-parameters for the first step, then fix these to find the best hyper-parameters
+for the second step.
 
 ## Citation
+If you use this code in your research please cite the following paper:
+```
+Paper not yet publically available
+```
 
 
-### To run (OLD)
 
-One time things
-- Generate corruptions.pkl (should be length 167, mostly for testing, also used in training)
-- Generate data (just elementals??)
 
-Training (a figure to explain)
-- Monolithic training (contrastive, cross entropy)
-- Modular training (modulels, autoencoders)
-- Identity training (pre-modules, post-autoencoders)
-
-Testing
-- Explain test.sh
-
-Analysis
-- Plotting etc.
 
 
