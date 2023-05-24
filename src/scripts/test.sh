@@ -5,7 +5,7 @@
 #SBATCH -o <your_slurm_logging_path>/slurm-%j.out    # file to send output to
 #SBATCH --array=0-19                 #  split the ckpts to test into groups. 20 groups with 4 jobs in each.
 #SBATCH --mem=16G                    #  RAM
-#SBATCH --gres=gpu:1                 #  one GPU 11gb
+#SBATCH --gres=gpu:1                 #  one GPU
 #SBATCH --constraint=11GB            #
 
 hostname

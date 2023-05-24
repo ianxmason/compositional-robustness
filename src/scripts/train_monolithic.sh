@@ -6,7 +6,7 @@
 #SBATCH --array=0                    #  Contrastive/CE: 0.
 #SBATCH --mem=24G                    #  RAM.
 #SBATCH --gres=gpu:1                 #  one GPU
-#SBATCH --constraint=11GB            #  another option is: any-A100
+#SBATCH --constraint=11GB            #
 
 hostname
 echo $CUDA_VISIBLE_DEVICES
