@@ -168,11 +168,11 @@ def main(elemental_corruptions, experiments, legend_names, dataset, results_path
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Args to test networks on all corruptions in a given directory.')
     parser.add_argument('--dataset', type=str, default='EMNIST', help="which dataset to use")
-    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/',
+    parser.add_argument('--data-root', type=str,
                         help="path to directory containing directories of different corruptions")
-    parser.add_argument('--results-path', type=str, default='/om2/user/imason/compositions/results/',
+    parser.add_argument('--results-path', type=str,
                         help="path to directory containing results of testing")
-    parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/analysis/',
+    parser.add_argument('--save-path', type=str,
                         help="path to directory to save analysis plots and pickle files")
     parser.add_argument('--seed', type=int, default=38164641, help="random seed")
     args = parser.parse_args()

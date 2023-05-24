@@ -257,11 +257,11 @@ def test_modules(experiment, validate, dataset, data_root, ckpt_path, save_path,
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Args to test networks on all corruptions in a given directory.')
     parser.add_argument('--dataset', type=str, default='EMNIST', help="which dataset to use")
-    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/',
+    parser.add_argument('--data-root', type=str,
                         help="path to directory containing directories of different corruptions")
-    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/',
+    parser.add_argument('--ckpt-path', type=str,
                         help="path to directory to save checkpoints")
-    parser.add_argument('--save-path', type=str, default='/om2/user/imason/compositions/deephys/',
+    parser.add_argument('--save-path', type=str,
                         help="path to directory to save deephys data to")
     parser.add_argument('--seed', type=int, default=38164641, help="random seed")
     parser.add_argument('--validate', action='store_true', help="If set, uses the validation rather than the test set")

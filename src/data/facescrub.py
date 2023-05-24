@@ -170,7 +170,7 @@ if __name__ == "__main__":
     # PARAMS
     parser = argparse.ArgumentParser(description='Generate multiple corruptions in parallel.')
     parser.add_argument('--corruption-ID', type=int, default=0, help="which corruption to generate")
-    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/',
+    parser.add_argument('--data-root', type=str,
                         help="path to directory containing directories of different corruptions")
     args = parser.parse_args()
 

@@ -1064,13 +1064,13 @@ def main(corruptions, dataset, data_root, ckpt_path, logging_path, vis_path, exp
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Args to train networks on different corruptions.')
     parser.add_argument('--dataset', type=str, default='EMNIST', help="which dataset to use")
-    parser.add_argument('--data-root', type=str, default='/om2/user/imason/compositions/datasets/',
+    parser.add_argument('--data-root', type=str,
                         help="path to directory containing directories of different corruptions")
-    parser.add_argument('--ckpt-path', type=str, default='/om2/user/imason/compositions/ckpts/',
+    parser.add_argument('--ckpt-path', type=str,
                         help="path to directory to save checkpoints")
-    parser.add_argument('--logging-path', type=str, default='/om2/user/imason/compositions/logs/',
+    parser.add_argument('--logging-path', type=str,
                         help="path to directory to save logs")
-    parser.add_argument('--vis-path', type=str, default='/om2/user/imason/compositions/figs/',
+    parser.add_argument('--vis-path', type=str,
                         help="path to directory to save data visualisations")
     parser.add_argument('--experiment', type=str, default='CrossEntropy',
                         help="which method to use. CrossEntropy or Contrastive or Modules.")

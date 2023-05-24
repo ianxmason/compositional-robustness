@@ -59,7 +59,7 @@ def main(dp_path, dataset, total_n_classes):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Args to test networks on all corruptions in a given directory.')
     parser.add_argument('--dataset', type=str, default='EMNIST', help="which dataset to use")
-    parser.add_argument('--deephys-path', type=str, default='/Users/ian/compositions/outputs/deephys/',
+    parser.add_argument('--deephys-path', type=str,
                         help="path to directory to save checkpoints")
     parser.add_argument('--seed', type=int, default=38164641, help="random seed")
     parser.add_argument('--total-n-classes', type=int, default=47, help="output size of the classifier")

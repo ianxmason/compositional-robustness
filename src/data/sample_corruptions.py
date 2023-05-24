@@ -5,7 +5,7 @@ import math
 from itertools import combinations, permutations
 
 random.seed(2778)
-root_dir = "/om2/user/imason/compositions/datasets/"
+root_dir = "<your_data_root_here>"
 output_dir = os.path.join(root_dir, "EMNIST/")
 
 # Which corruptions to use

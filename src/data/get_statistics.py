@@ -10,7 +10,7 @@ sys.path.append("../")
 from data.data_loaders import get_static_dataloaders
 
 datasets = ["EMNIST", "CIFAR", "FACESCRUB"]
-data_root = "/om2/user/imason/compositions/datasets/"
+data_root = "<your_data_root_here>"
 for dataset in datasets:
     corruption_path = os.path.join(data_root, dataset, "Identity")
     if dataset == "EMNIST":  # 3, 28, 28
