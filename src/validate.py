@@ -109,7 +109,7 @@ def val_autoencoders_mse(experiment, dataset, data_root, ckpt_path, vis_path, to
                     pre_ae_imgs_id = x_val_id.detach().cpu().numpy()
                     pre_ae_lbls_id = y_val_id.detach().cpu().numpy()
 
-                # # Apply autoencoder
+                # Apply autoencoder
                 for block in blocks:
                     features = block(features)
 

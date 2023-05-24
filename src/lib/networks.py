@@ -68,28 +68,28 @@ def create_emnist_network(total_n_classes, experiment, corruption_names, dev):
 
     network_blocks.append(
         nn.Sequential(
-            SimpleConvBlock(3, 64, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.1)  # 0.1
+            SimpleConvBlock(3, 64, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.1)
         ).to(dev)
     )
     network_block_ckpt_names.append("{}_ConvBlock1_{}.pt".format(experiment, '-'.join(corruption_names)))
 
     network_blocks.append(
         nn.Sequential(
-            SimpleConvBlock(64, 128, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.3)  # 0.3
+            SimpleConvBlock(64, 128, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.3)
         ).to(dev)
     )
     network_block_ckpt_names.append("{}_ConvBlock2_{}.pt".format(experiment, '-'.join(corruption_names)))
 
     network_blocks.append(
         nn.Sequential(
-            SimpleConvBlock(128, 256, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.5)  # 0.5
+            SimpleConvBlock(128, 256, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.5)
         ).to(dev)
     )
     network_block_ckpt_names.append("{}_ConvBlock3_{}.pt".format(experiment, '-'.join(corruption_names)))
 
     network_blocks.append(
         nn.Sequential(
-            SimpleConvBlock(256, 256, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.5)  # 0.5
+            SimpleConvBlock(256, 256, kernel_size=5, stride=2, padding=2, batch_norm=False, dropout=0.5)
         ).to(dev)
     )
     network_block_ckpt_names.append("{}_ConvBlock4_{}.pt".format(experiment, '-'.join(corruption_names)))
