@@ -14,8 +14,8 @@ The code in this repo is written to be run on a cluster using [Slurm](https://sl
 [Singularity](https://docs.sylabs.io/guides/3.5/user-guide/introduction.html). The Docker image is converted into a Singularity image.
 
 The code is almost all executed via ```sbatch``` and the shell scripts in ```src/scripts```.
-- If using Singularity and Slurm you should only need to change the bind paths (```-B /om,/om2/user/$USER```) 
-and path to the Singularity image (```/om2/user/imason/singularity/imason-pytorch.simg```) in these scripts.
+- If using Singularity and Slurm you should only need to add your slurm logging path, bind paths and path to the 
+  Singularity image in these scripts.
 - If working on a system without these tools it should be possible to run the code by taking the commands in these scripts
   (beginning ```singularity exec ...```) and running only the part of the command that starts with ```python ...```.
   - Commands that contain ```$SLURM_ARRAY_TASK_ID``` will need to be run with ```$SLURM_ARRAY_TASK_ID``` set to each 
@@ -68,7 +68,9 @@ sbatch scripts/generate_data.sh
 #### Generating Corruption Names for Training
 Running the following command will generate a file called ```corruption_names.pkl``` in the ```data_root/EMNIST``` directory.
 You will need to change the absolute path to your data root in line 8 before running.
-```python data/sample_corruptions.py ```
+```
+python data/sample_corruptions.py
+```
 This file is a random sample to get all the combinations and permuations of corruptions that will be used for testing our models.
 
 CIFAR and FACESCRUB also need a corruption names file. The sampling script can be run again, but easiest is to copy the EMNIST file.
