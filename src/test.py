@@ -1,5 +1,5 @@
 """
-Test models trained with different combinations of data on all available compositions
+Model testing on all sampled compositions of corruptions.
 """
 import argparse
 import os

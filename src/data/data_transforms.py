@@ -1,6 +1,6 @@
 """
 Data transforms.
-Some are from https://github.com/hendrycks/robustness/blob/master/ImageNet-C/create_c/make_cifar_c.py
+Some are adapted from https://github.com/hendrycks/robustness/blob/master/ImageNet-C/create_c/make_cifar_c.py
 """
 from abc import ABC, abstractmethod
 import math

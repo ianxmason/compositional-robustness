@@ -23,7 +23,10 @@ The code is almost all executed via ```sbatch``` and the shell scripts in ```src
 
 ## Data Generation
 
-All commands should be run from inside the ```src``` directory.
+All commands should be run from inside the ```src``` directory. The corrupting functions are defined in 
+```data/data_transforms.py``` where new corruptions can be added and/or the severity of corruptions can be changed. 
+The corruptions are designed to work as [torchvision transforms](https://pytorch.org/vision/stable/transforms.html#composition)
+so should be able to be applied to most vision datasets.
 
 #### EMNIST
 First download the base dataset to the directory where you want to generate the training data. 
@@ -124,9 +127,9 @@ trained, two different classifiers can be trained using the command in ```script
 If the code runs correctly model checkpoints should be saved in the directory specified by ```--ckpt-path```. The 
 different methods can then be evaluated by running the ```scripts/test.sh``` script. 
 Here the arguments ```--dataset```, ```--total-n-classes``` and ```--experiment```
-should be set to the experiment that you wish to evaluate. The options for ```--dataset``` are ```EMNIST```, ```CIFAR```,
-and ```FACESCRUB``` which have ```--total-n-classes``` of ```47```, ```10``` and ```388``` respectively. The options for ```--experiment```
-are ```CrossEntropy```, ```Contrastive```, ```AutoModules``` and ```ImgSpace```.
+should be set according to the experiment that you wish to evaluate. The options for ```--dataset``` are ```EMNIST```,
+```CIFAR```, and ```FACESCRUB``` which have ```--total-n-classes``` of ```47```, ```10``` and ```388``` respectively.
+The options for ```--experiment``` are ```CrossEntropy```, ```Contrastive```, ```AutoModules``` and ```ImgSpace```.
 
 Once again you will need to point to the directories where the data is stored with ```--data-root``` and where the 
 checkpoints are stored with ```--ckpt-path```. The arguments ```--save-path```, ```--activations-path``` and ```--vis-path```

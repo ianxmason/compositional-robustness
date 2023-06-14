@@ -1,5 +1,5 @@
 """
-Train a model on individual data transformations, pairs of transformations and all transformations. .
+Model training for all methods.
 """
 import argparse
 import os

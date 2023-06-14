@@ -2,7 +2,7 @@
 FACESCRUB dataset.
 
 Assumes a flat directory of 50429 images curated as in https://www.pnas.org/doi/epdf/10.1073/pnas.1800901115.
-This is turned into and ImageFolder dataset along with methods to generate corrupted versions of the FACESCRUB dataset.
+This is turned into an ImageFolder dataset along with methods to generate corrupted versions of the FACESCRUB dataset.
 """
 import matplotlib
 import argparse
