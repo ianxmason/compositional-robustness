@@ -25,8 +25,8 @@ The code is almost all executed via ```sbatch``` and the shell scripts in ```src
 
 All commands should be run from inside the ```src``` directory. The corrupting functions are defined in 
 ```data/data_transforms.py``` where new corruptions can be added and/or the severity of corruptions can be changed. 
-The corruptions are designed to work as [torchvision transforms](https://pytorch.org/vision/stable/transforms.html#composition)
-so should be able to be applied to most vision datasets.
+The corruptions are designed to work as [torchvision transforms](https://pytorch.org/vision/stable/transforms.html)
+so should be able to be applied to most standard vision datasets.
 
 #### EMNIST
 First download the base dataset to the directory where you want to generate the training data. 
