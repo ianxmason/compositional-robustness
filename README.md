@@ -1,5 +1,5 @@
 # Modularity Trumps Invariance for Compositonal Robustness
-This repository contains the code for the paper Modularity Trumps Invariance for Compositonal Robustness.
+This repository contains the code for the paper [Modularity Trumps Invariance for Compositonal Robustness](https://arxiv.org/abs/2306.09005).
 
 ## Dependencies
 The dependencies for this project can be found in ```docker/Dockerfile```. The Docker
@@ -152,7 +152,12 @@ for the second step.
 ## Citation
 If you use this code in your research please cite the following paper:
 ```
-Paper not yet publically available
+@article{mason2023modularity,
+  title={Modularity Trumps Invariance for Compositional Robustness},
+  author={Mason, Ian and Sarkar, Anirban and Sasaki, Tomotake and Boix, Xavier},
+  journal={arXiv preprint arXiv:2306.09005},
+  year={2023}
+}
 ```
 
 
